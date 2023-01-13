@@ -2,10 +2,12 @@
 
 ## Experiments
 ---
+* The Last.fm-2k and MovieLens-1M datasets used in the experiments 
+  are found at https://grouplens.org/datasets/hetrec-2011/
 
 ### Sources of envy (sec 5.1)
 
-#### Envy from model mispecifications (Appendix C.1)
+#### Envy from model mispecifications (Appendix C.2)
 ---
 
 * *Goal*: show that, if the modelling assumptions are too strong, the
@@ -28,6 +30,9 @@
   compression with resemblances to PCA. The factors can be computed 
   in different ways, such as SVD and SGD. 
   
+  [Some useful slides on matrix factorization](https://cse.iitk.ac.in/users/piyush/courses/ml_autumn16/771A_lec14_slides.pdf) and an article on 
+  [methods to compute factors](https://datajobs.com/data-science-repo/Recommender-Systems-%5BNetflix%5D.pdf).
+  
 * In the paper, the authors use the implementation of 
   [Implicit Least Squares](https://implicit.readthedocs.io/en/latest/als.html?highlight=collaborative) from the Python Implicit library to 
   compute "dummy" (synthetic) *ground truth preferences* for both the 
@@ -43,5 +48,5 @@
   preference matrix $\mathbf{X}^{\ast}$ and the recommender system's estimated 
   preferences $\hat{\mathbf{X}}$? Is $\hat{\mathbf{X}}$ meant to be an approximation of $\mathbf{X}^{\ast}$?
 
-#### Envy from equal user utility EEU (Appendix C.2)
+#### Envy from equal user utility EEU (Appendix C.3)
 ---
