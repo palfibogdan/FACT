@@ -55,7 +55,7 @@ def grid_search(
     logger.debug("Saved best model to %s", best_model_path)
     with open(best_hparams_path, "w") as fd:
         fd.write("factor,regularizer,alpha,metric,score\n")
-        fd.write(",".join(list(map(str, best_hparams))) + [metric, best_score])
+        fd.write(",".join(list(map(str, best_hparams + (metric, best_score)))))
     logger.debug("Saved best model hyperparams to %s", best_hparams_path)
     return best_model
 
@@ -87,14 +87,17 @@ if __name__ == "__main__":
     # make ground truths
     ground_truth_paths = [
         config.MODELS_DIR / "model_lastfm_ground_truth.npz",
-        config.MODELS_DIR / "hyperp_lastfm_ground_truth.txt",
+        config.MODELS_DIR / "hparams_lastfm_ground_truth.txt",
     ]
     ground_truth_model = create_preferences(
         lastfm_csr, seed, ground_truth_paths, **constants.ground_truth_hparams
     )
-    ground_truth = ground_truth_model.user_factors @ ground_truth_model.item_factors.T
+    U, V = ground_truth_model.user_factors, ground_truth_model.item_factors
+    if implicit.gpu.HAS_CUDA:
+        U, V = U.to_numpy(), V.to_numpy()
+    ground_truth = U @ V.T
     # save the ground truths
-    savepath = "ground_truth_lasftm.npy"
+    savepath = config.MODELS_DIR / "ground_truth_lastfm.npy"
     np.save(savepath, ground_truth)
     logger.debug("Saved ground truth preferences for lastfm at %s", savepath)
 
@@ -116,7 +119,7 @@ if __name__ == "__main__":
     ground_truth_masked_sparse = sparse.csr_matrix(ground_truth_masked)
     recommender_paths = [
         config.MODELS_DIR / "model_lastfm.npz",
-        config.MODELS_DIR / "hyperp_lastfm.txt",
+        config.MODELS_DIR / "hparams_lastfm.txt",
     ]
     model = create_preferences(
         ground_truth_masked_sparse,
