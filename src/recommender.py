@@ -17,13 +17,38 @@ import utils
 logger = logging.getLogger(__name__)
 
 
-def grid_search(
+def recommender_grid_search(
     train_mat: sparse.csr_matrix,
     valid_mat: sparse.csr_matrix,
     best_model_paths: Sequence[str],
     metric: str = "map",
     **hyperparams: Dict[str, Sequence],
 ) -> implicit.als.AlternatingLeastSquares:
+    """
+    Fits a recommender system on a training set using matrix factorization as
+    described in http://yifanhu.net/PUB/cf.pdf, and evaluates performance on
+    a validation set according to the passed metric. This metric drives model
+    selection in a hyperparameter grid search.
+
+    Args:
+        train_mat: User-item training set to fit the matrix factors,
+                   in scipy.sparse.csr_matrix format.
+        valid_mat: User-item validation set, evaluated according to `metric`,
+                   in scipy.sparse.csr_matrix format.
+        best_model_paths: List containing 2 paths. The best model is saved in
+                          the first path, its hyperparameters in the second one.
+        metric: The evaluation metric used to test the trained model, provided
+                in the implicit/evaluation.pyx module. Supported values are:
+                ['precision', map', 'ndcg', 'auc']. Defaults to 'map'.
+        hyperparams: A mapping from valid implicit.als.AlternatingLeastSquares
+                     keyword arguments to list of values. The cartesian product
+                     of these values is used for grid search.
+
+    Returns:
+        The best matrix factorization model found according to `metric`, with
+        factors stored in `model.user_factors` and `model.item_factors`.
+    """
+
     logger.info("Hyperparameters in grid search:")
     logger.info(pprint.pformat(hyperparams))
     hyperparams_flat = list(it.product(*hyperparams.values()))
@@ -55,7 +80,7 @@ def grid_search(
     logger.debug("Saved best model to %s", best_model_path)
     with open(best_hparams_path, "w") as fd:
         fd.write("factor,regularizer,alpha,metric,score\n")
-        fd.write(",".join(list(map(str, best_hparams + (metric, best_score)))))
+        fd.write(f"{','.join(list(map(str, best_hparams + (metric, best_score))))}\n")
     logger.debug("Saved best model hyperparams to %s", best_hparams_path)
     return best_model
 
@@ -71,7 +96,7 @@ def create_preferences(
         tmp_csr, train_percentage=2 / 3, random_state=seed
     )
     # create ground truth preferences
-    model = grid_search(train_csr, valid_csr, savepaths, **kwargs)
+    model = recommender_grid_search(train_csr, valid_csr, savepaths, **kwargs)
     return model
 
 
@@ -93,6 +118,8 @@ if __name__ == "__main__":
         lastfm_csr, seed, ground_truth_paths, **constants.ground_truth_hparams
     )
     U, V = ground_truth_model.user_factors, ground_truth_model.item_factors
+    # when run on GPUs, U and V are instances of implicit.gpu._cuda.Matrix, which
+    # has no transpose attribute
     if implicit.gpu.HAS_CUDA:
         U, V = U.to_numpy(), V.to_numpy()
     ground_truth = U @ V.T
