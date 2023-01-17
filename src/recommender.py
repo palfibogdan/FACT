@@ -117,6 +117,7 @@ if __name__ == "__main__":
     ground_truth_model = create_preferences(
         lastfm_csr, seed, ground_truth_paths, **constants.ground_truth_hparams
     )
+    # matrix completion
     U, V = ground_truth_model.user_factors, ground_truth_model.item_factors
     # when run on GPUs, U and V are instances of implicit.gpu._cuda.Matrix, which
     # has no transpose attribute
@@ -139,10 +140,12 @@ if __name__ == "__main__":
         for i in range(ground_truth.shape[0])
         for j in range(ground_truth.shape[1])
     ]
+    # pick some random preferences (20%) that will not be zeroed out
     kept_preferences = rng.choice(indices, size=int(0.2 * len(indices)), replace=False)
     ground_truth_masked = np.zeros_like(ground_truth)
     for i, j in kept_preferences:
         ground_truth_masked[i, j] = ground_truth[i, j]
+    # estimate the true preferences with the actual recommender system
     ground_truth_masked_sparse = sparse.csr_matrix(ground_truth_masked)
     recommender_paths = [
         config.MODELS_DIR / "model_lastfm.npz",
