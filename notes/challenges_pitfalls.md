@@ -9,6 +9,8 @@
   implementation ad interim*)? If this is the case, and validation 
   is performed on $10\%$ of the masked ground truth preferences, what 
   do we do with the remaining masked $20\%$?
+    * If the $20\%$ sampling from the ground truth options is the 
+      case, should we sample uniformly or uniformly *per user*?
 * **Recommender evaluation metric**: it is not specified which 
    metric is used to evaluate a recommender (validation); we set 
    on using the metrics provided by 
