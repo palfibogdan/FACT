@@ -71,9 +71,9 @@ def ocef(delta, alpha, epsilon, K):
 	rewards = []
 	A = []
 
-    t = 0
-    while True:
-        l = np.random.choice(S)
+	t = 0
+	while(True):
+		l = np.random.choice(S)
 
 		betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
 
@@ -91,9 +91,6 @@ def ocef(delta, alpha, epsilon, K):
 			# TODO Store all t for which baseline was not pulled
 			A.append(t)
 
-        # Observe context, show action get reward
-        # Update conf intervals
-        # TODO CODE THIS
 
 		# Observe context, show action get reward
 		# Update conf intervals
@@ -111,7 +108,3 @@ def ocef(delta, alpha, epsilon, K):
 			return False #eps_no_envy
 
 
-        if exists_higher_utility(S, k_t):
-            return envy
-        if not S:
-            return eps_no_envy
