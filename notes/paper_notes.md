@@ -2,8 +2,8 @@
 
 ## Experiments
 ---
-* The Last.fm-2k and MovieLens-1M datasets used in the experiments 
-  are found at https://grouplens.org/datasets/hetrec-2011/
+* Last.fm-2k dataset: https://grouplens.org/datasets/hetrec-2011/
+* MovieLens-1m dataset: https://grouplens.org/datasets/movielens/1m/
 
 ### Sources of envy (sec 5.1)
 
