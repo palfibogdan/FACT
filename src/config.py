@@ -13,3 +13,5 @@ MOVIELENS_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
 
 MODELS_DIR = ROOT_DIR / "models"
 MODELS_DIR.mkdir(exist_ok=True)
+
+WANDB_DIR = ROOT_DIR

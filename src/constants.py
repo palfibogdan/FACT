@@ -1,3 +1,5 @@
+SEED = 42
+
 # appendix C.2
 ground_truth_hparams = {
     "factors": [2 ** (i + 4) for i in range(4)],
