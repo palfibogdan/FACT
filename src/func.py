@@ -1,72 +1,110 @@
 import numpy as np
+import random
 
 
-def calc_bounds(delta, omega):
 
-    # where are omega, sigma, K specified?
+#TODO:
+# Implement conservative constraint Xi
+# Implement observe, action and reward part
+# Verify indices for Beta (Lemma 4 returns Beta_t but OCEF uses Beta_(t-1) )
+# Implement get_phi from Lemma 5 and 6
 
-    theta = np.log(1 + omega) * ((omega * delta) / (2 * (2 + omega))) ** (
-        1 / (1 + omega)
-    )
+def update_bounds(delta, N, rewards):
+    
+    # where is omega specified?
+	sigma = 0.5
+	omega = 0.5 #random in (0,1)
 
-    # N = count?
+	theta = np.log(1+omega) * ((omega*delta) / (2*(2+omega)))**(1/(1+omega))
 
-    # mean_mu =
+	betas = []
+	low_bounds = []
+	high_bounds = []
+	K = len(N)
+	for n, r in zip(N, rewards):
+		if n == 0:
+			mean_mu = 0
+		else:
+			mean_mu = r / n
 
-    beta = np.sqrt(
-        (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega)) / N
-    ) * np.sqrt(np.log(2 * (K + 1) / theta * np.log((1 + omega) * N)))
+		beta = np.sqrt((2 * sigma**2 * (1+np.sqrt(omega))**2 * (1+omega)) / N) * np.sqrt(np.log(2*(K+1)/theta * np.log((1+omega)*N))) 
+		betas.append(beta)
 
-    low_bounds = mean_mu - beta
-    high_bounds = mean_mu + beta
+		low_bounds.append(mean_mu - beta)
+		high_bounds.append(mean_mu + beta)
 
-    return beta, low_bounds, high_bounds
-
-
-def get_min_beta():
-    return 0
-
-
-def remove_non_envy_elements(S):
-    return S
-
-
-def get_eps_no_envy():
-    return 0
-
-
-def get_envy():
-    return 1
+	return beta, low_bounds, high_bounds
 
 
-def exists_higher_utility(S, k_t):
-    return True
+def remove_non_envy_elements(S, low_bounds, high_bounds, epsilon):
+	for k in S:
+		if high_bounds[k] <= low_bounds[0] + epsilon:
+			S.remove(k)
+	return S
+
+
+def exists_higher_utility(S, low_bounds, high_bounds):
+	for k in S:
+		if low_bounds[k] > high_bounds[0]:
+			return True
+	return False
+
+def get_conservarive_constraint(t, A, rewards, Phi, low_bound_l, high_bound_0, N, alpha):
+
+	xi = 0
+	for s in A:
+		xi += rewards[s] - Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
+
+	return xi
+
+
+def get_phi():
+	return 0
 
 
 def ocef(delta, alpha, epsilon, K):
 
-    S = K
-    eps_no_envy = get_eps_no_envy()
-    envy = get_envy()
+	S = K
+	#eps_no_envy = get_eps_no_envy()
+	#envy = get_envy()
+	N = np.zeros_like(S)
+	rewards = []
+	A = []
 
-    beta0, low_bounds, high_bounds = calc_bounds()
+	t = 0
+	while(True):
+		l = np.random.choice(S)
 
-    t = 0
-    while True:
-        l = np.random.choice(S)
+		betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
 
-        if beta0[t] > get_min_beta() or xi[t] < 0:
-            k_t = 0
-        else:
-            k_t = l
+		Phi = get_phi()
 
-        # Observe context, show action get reward
-        # Update conf intervals
-        # TODO CODE THIS
+		# not sure if t here is t-1 or the actual t in their formulas
+		xi = get_conservarive_constraint(t, A, rewards, Phi, low_bounds[l], high_bounds[0], N[0], alpha)
 
-        S = remove_non_envy_elements(S)
+		if betas[0] > min(betas[1:]) or xi < 0:
+			k_t = 0
+			N[0] += 1
+		else:
+			k_t = l
+			N[l] += 1
+			# TODO Store all t for which baseline was not pulled
+			A.append(t)
 
-        if exists_higher_utility(S, k_t):
-            return envy
-        if not S:
-            return eps_no_envy
+
+		# Observe context, show action get reward
+		# Update conf intervals
+		# TODO CODE THIS
+  
+		# Store all rewards
+		rewards.append[r]
+
+		S = remove_non_envy_elements(S)
+
+		t += 1
+		if exists_higher_utility(S, k_t):
+			return True #envy
+		if not S:
+			return False #eps_no_envy
+
+
