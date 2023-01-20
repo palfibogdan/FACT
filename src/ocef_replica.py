@@ -1,5 +1,4 @@
 import random
-
 import numpy as np
 
 # TODO:
@@ -114,3 +113,5 @@ def ocef(delta, alpha, epsilon, K):
             return True  # envy
         if not S:
             return False  # eps_no_envy
+
+
