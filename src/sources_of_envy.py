@@ -55,14 +55,12 @@ def degrees_of_envy(rewards_mat: np.ndarray, recommendations_mat: np.ndarray) ->
 
 
 # NEW:
-def get_utilities(M, past_rewards, past_recommendations):
-
-	utilities = np.zeros((len(M), len(M)))
-
-	for user in M:
-		N = np.count()
-
-	return utilities
+def get_utilities(ground_truth_preferences, recommendations):
+    # return a utility matrix where element i, j  represents
+    # the utility of user i with the policies j
+    # utility is calculated as the 
+    utilities = ground_truth_preferences @ recommendations.T
+    return utilities
     
 # [u^m(pi^m), u^m(pi^n1), u^m(pi^n2), u^m(pi^n3), u^m(pi^n4), u^m(pi^n5)]
 
