@@ -85,39 +85,47 @@ def recommender_grid_search(
     return best_model
 
 
-def best_model_each_factor(train_mat: sparse.csr_matrix,
+# NOTE best_factors_path should contain the dataset in its name to avoid override
+# NOTE does not save the best hyperparameters for each best model found
+def best_model_each_factor(
+    train_mat: sparse.csr_matrix,
     valid_mat: sparse.csr_matrix,
     best_factors_path: str,
     metric: str = "map",
-    **hyperparams: Dict[str, Sequence],):
-    
-    """	
-    This function trains a model for each factor and saves the best model for each factor
-    To be used with the recommender models
+    **hyperparams: Dict[str, Sequence],
+):
+    """
+    This function trains a model for each factor and saves the best model for
+    each factor.
+    To be used with the recommender models.
     """
 
-    factors = hyperparams['factors']
-    regularization = hyperparams['regularization']
-    alpha = hyperparams['alpha']
+    factors = hyperparams["factors"]
+    regularization = hyperparams["regularization"]
+    alpha = hyperparams["alpha"]
 
-   
     # save the best model for each factor
     for factor in factors:
-        best_score, best_model, best_hparams = -1.0, None, None
+        best_score, best_model = -1.0, None
         for reg in regularization:
             for a in alpha:
                 hparams = (factor, reg, a)
-                model = implicit.als.AlternatingLeastSquares(factors=factor, regularization=reg, alpha=a)
+                model = implicit.als.AlternatingLeastSquares(
+                    factors=factor, regularization=reg, alpha=a
+                )
                 model.fit(train_mat)
-                score = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)[metric]
+                score = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)[
+                    metric
+                ]
                 if score > best_score:
                     logger.info(
-                        f"Best model found (for {factor} factors) ! Old {metric}: {best_score} new {metric}: {score} hparams: {hparams}")
+                        f"Best model found (for {factor} factors) ! Old {metric}: {best_score} new {metric}: {score} hparams: {hparams}"
+                    )
                     best_score = score
                     best_model = deepcopy(model)
 
-        name = f'model_{factor}_factors'
-    
+        name = f"model_{factor}_factors"
+
         path = best_factors_path / name
         best_model.save(path)
 
@@ -135,62 +143,3 @@ def create_preferences(
     # create ground truth preferences
     model = recommender_grid_search(train_csr, valid_csr, savepaths, **kwargs)
     return model
-
-
-# if __name__ == "__main__":
-#     utils.setup_root_logging()
-
-#     seed = 42
-#     rng = np.random.default_rng(seed=seed)
-
-#     lastfm = datasets.get_lastfm()
-#     lastfm_csr = sparse.csr_matrix(lastfm.values)
-
-#     # make ground truths
-#     ground_truth_paths = [
-#         config.MODELS_DIR / "model_lastfm_ground_truth.npz",
-#         config.MODELS_DIR / "hparams_lastfm_ground_truth.txt",
-#     ]
-#     ground_truth_model = create_preferences(
-#         lastfm_csr, seed, ground_truth_paths, **constants.ground_truth_hparams
-#     )
-#     # matrix completion
-#     U, V = ground_truth_model.user_factors, ground_truth_model.item_factors
-#     # when run on GPUs, U and V are instances of implicit.gpu._cuda.Matrix, which
-#     # has no transpose attribute
-#     if implicit.gpu.HAS_CUDA:
-#         U, V = U.to_numpy(), V.to_numpy()
-#     ground_truth = U @ V.T
-#     # save the ground truths
-#     savepath = config.MODELS_DIR / "ground_truth_lastfm.npy"
-#     np.save(savepath, ground_truth)
-#     logger.debug("Saved ground truth preferences for lastfm at %s", savepath)
-
-#     # make recommender
-#     # TODO check that this is the correct interpretation & vectorize
-#     # we mask 80% of the ground truth data because in section 5.1 they say:
-#     # the simulated recommender system estimates relevance scores using low-rank
-#     # matrix completion (Bell and Sejnowski 1995) on a training sample of 20% of
-#     # the ground truth preferences
-#     indices = [
-#         (i, j)
-#         for i in range(ground_truth.shape[0])
-#         for j in range(ground_truth.shape[1])
-#     ]
-#     # pick some random preferences (20%) that will not be zeroed out
-#     kept_preferences = rng.choice(indices, size=int(0.2 * len(indices)), replace=False)
-#     ground_truth_masked = np.zeros_like(ground_truth)
-#     for i, j in kept_preferences:
-#         ground_truth_masked[i, j] = ground_truth[i, j]
-#     # estimate the true preferences with the actual recommender system
-#     ground_truth_masked_sparse = sparse.csr_matrix(ground_truth_masked)
-#     recommender_paths = [
-#         config.MODELS_DIR / "model_lastfm.npz",
-#         config.MODELS_DIR / "hparams_lastfm.txt",
-#     ]
-#     model = create_preferences(
-#         ground_truth_masked_sparse,
-#         seed,
-#         recommender_paths,
-#         **constants.recommender_hparams,
-#     )
