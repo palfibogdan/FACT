@@ -85,6 +85,43 @@ def recommender_grid_search(
     return best_model
 
 
+def best_model_each_factor(train_mat: sparse.csr_matrix,
+    valid_mat: sparse.csr_matrix,
+    best_factors_path: str,
+    metric: str = "map",
+    **hyperparams: Dict[str, Sequence],):
+    
+    """	
+    This function trains a model for each factor and saves the best model for each factor
+    To be used with the recommender models
+    """
+
+    factors = hyperparams['factors']
+    regularization = hyperparams['regularization']
+    alpha = hyperparams['alpha']
+
+   
+    # save the best model for each factor
+    for factor in factors:
+        best_score, best_model, best_hparams = -1.0, None, None
+        for reg in regularization:
+            for a in alpha:
+                hparams = (factor, reg, a)
+                model = implicit.als.AlternatingLeastSquares(factors=factor, regularization=reg, alpha=a)
+                model.fit(train_mat)
+                score = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)[metric]
+                if score > best_score:
+                    logger.info(
+                        f"Best model found (for {factor} factors) ! Old {metric}: {best_score} new {metric}: {score} hparams: {hparams}")
+                    best_score = score
+                    best_model = deepcopy(model)
+
+        name = f'model_{factor}_factors'
+    
+        path = best_factors_path / name
+        best_model.save(path)
+
+
 def create_preferences(
     lastfm_csr: sparse.csr_matrix, seed: int, savepaths: Sequence[str], **kwargs
 ) -> implicit.als.AlternatingLeastSquares:

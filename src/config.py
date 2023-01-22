@@ -15,3 +15,9 @@ MODELS_DIR = ROOT_DIR / "models"
 MODELS_DIR.mkdir(exist_ok=True)
 
 WANDB_DIR = ROOT_DIR
+
+# Save best models for all factor hyperparmeter values
+MOVIELENS_RECOMMENDER_DIR = MODELS_DIR / "movielens_recommender"
+MOVIELENS_RECOMMENDER_DIR.mkdir(exist_ok=True)
+LASTFM_RECOMMENDER_DIR = MODELS_DIR / "lastfm_recommender"
+LASTFM_RECOMMENDER_DIR.mkdir(exist_ok=True)
