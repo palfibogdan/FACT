@@ -34,6 +34,9 @@ def one_hot(labels: np.ndarray, max_label: int) -> np.ndarray:
     Returns:
         A one-hot-encoded 2D array with 1s at `labels`, 0s elsewhere.
     """
+    assert (
+        labels.max() <= max_label
+    ), f"max_label is {max_label}, but labels containst values up to {labels.max()}"
     if len(labels.shape) < 2:
         labels = labels[:, None]
     one_hot_mat = np.zeros((labels.size, max_label), dtype=int)
