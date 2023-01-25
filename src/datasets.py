@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -13,8 +14,9 @@ import config
 logger = logging.getLogger(__name__)
 
 
+# FIXME halts while downloading lastfm!
 def download_dataset(dataset_url: str, dataset_dir: str):
-    if os.path.exists(dataset_dir):
+    if os.path.exists(dataset_dir) and len(os.listdir(dataset_dir)) > 1:
         logger.info("%s already exists, abort download", dataset_dir)
         return
     logger.info("Downloading zipped dataset from %s", dataset_url)
@@ -32,9 +34,11 @@ def download_dataset(dataset_url: str, dataset_dir: str):
 # should be mapped to top_k_artists.sort_values() if the actual item id is
 # wanted, which should not be the case for our purposes
 @ft.lru_cache()
-def get_lastfm(topk_artists=2500, dataset_dir: str = config.LASTFM_DIR) -> pd.DataFrame:
+def get_lastfm(
+    topk_artists=2500, dataset_dir: Path = config.LASTFM_DATA_DIR, **_
+) -> pd.DataFrame:
     download_dataset(config.LASTFM_URL, dataset_dir)
-    user_item_df = pd.read_csv(config.LASTFM_DIR / "user_artists.dat", sep="\t")
+    user_item_df = pd.read_csv(dataset_dir / "user_artists.dat", sep="\t")
     user_item_df = user_item_df.rename(
         columns={"userID": "user", "artistID": "item", "weight": "score"}
     )
@@ -55,13 +59,16 @@ def get_lastfm(topk_artists=2500, dataset_dir: str = config.LASTFM_DIR) -> pd.Da
 
 @ft.lru_cache()
 def get_movielens(
-    topk_users=2000, topk_movies=2500, dataset_dir: str = config.MOVIELENS_DIR.parent
+    topk_users=2000,
+    topk_movies=2500,
+    dataset_dir: Path = config.MOVIELENS_DATA_DIR.parent,
+    **_
 ) -> pd.DataFrame:
     download_dataset(config.MOVIELENS_URL, dataset_dir)
     # headers from data/MovieLens/README
     column_names = ["user", "item", "score", "timestamp"]
     user_item_df = pd.read_csv(
-        config.MOVIELENS_DIR / "ratings.dat",
+        dataset_dir / "ratings.dat",
         names=column_names,
         sep="::",
         engine="python",
@@ -85,3 +92,10 @@ def get_movielens(
     ratings_remap = dict(zip(range(1, 6), np.linspace(3, 5, 5)))
     user_item_df = user_item_df.applymap(lambda rating: ratings_remap.get(rating, 0))
     return user_item_df
+
+
+DATASETS_RETRIEVE = {"lastfm": get_lastfm, "movielens": get_movielens}
+
+
+def get_dataset(dataset_name: str, **kwargs) -> pd.DataFrame:
+    return DATASETS_RETRIEVE[dataset_name](**kwargs)

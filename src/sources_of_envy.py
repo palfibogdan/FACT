@@ -1,10 +1,15 @@
+import logging
 from typing import Dict, Sequence, Tuple
 
 import numpy as np
 
+import config
+import constants
 import recommender
 import rl
 import utils
+
+logger = logging.getLogger(__name__)
 
 
 def delta_envy(utilities: np.ndarray) -> np.ndarray:
@@ -95,3 +100,21 @@ def experiment_5_1_1(
         metrics_dict["prop_eps_envy"][recommender_model.factors] = prop_envy_users
 
     return metrics_dict
+
+
+def do_envy_from_mispecification(
+    lastfm_data_dir=config.LASTFM_DATA_DIR,
+    lastfm_models_dir=config.LASTFM_RECOMMENDER_DIR,
+    lastfm_plots_dir=config.LASTFM_PLOTS_DIR,
+    movielens_data_dir=config.MOVIELENS_DATA_DIR,
+    movielens_models_dir=config.MOVIELENS_RECOMMENDER_DIR,
+    movielens_plots_dir=config.MOVIELENS_PLOTS_DIR,
+    rng: np.random.Generator = None,
+    **_,
+):
+    # TODO finish this
+    recommender.do_envy_from_mispecification(
+        ...,
+        ground_truth_hparams={"metric": "map", **constants.ground_truth_hparams},
+        recommender_hparams={"metric": "map", **constants.recommender_hparams},
+    )

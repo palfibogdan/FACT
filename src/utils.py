@@ -1,4 +1,5 @@
 import logging
+from typing import Generator
 
 import numpy as np
 import scipy
@@ -67,5 +68,14 @@ def minmax_scale(a: np.ndarray) -> np.ndarray:
     return np.squeeze((a - min_) / (a.max(axis=1)[:, None] - min_))
 
 
-def remove_diag(a: np.ndarray) -> np.ndarray:
-    return a[~np.eye(a.shape[0], dtype=bool)].reshape(a.shape[0], -1)
+Seed = Generator[int, None, None]
+
+
+def SequenceGenerator(start: int) -> Seed:
+    """
+    A simple infinite sequence of integers. Call next() on it when e.g. an
+    actual seed should be used.
+    """
+    while True:
+        yield start
+        start += 1
