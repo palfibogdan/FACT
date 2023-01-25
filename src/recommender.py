@@ -39,6 +39,10 @@ def get_preferences(model: implicit.als.AlternatingLeastSquares) -> np.ndarray:
     return user_factors @ item_factors.T
 
 
+def load_preferences(filename: str) -> np.ndarray:
+    return get_preferences(load_recommeder_model(filename))
+
+
 # NOTE each combination of hparams in hparams_flat should be ordered according
 # to hparams_names
 def search_best_model(
@@ -245,7 +249,7 @@ def generate_recommenders(
 ):
     if ground_truth_model_path is not None and ground_truth_model_path.exists():
         logger.info("Loading ground truth preferences from %s", ground_truth_model_path)
-        ground_truth = get_preferences(load_recommeder_model(ground_truth_model_path))
+        ground_truth = load_preferences(ground_truth_model_path)
     elif dataset_name is not None and dataset_name in datasets.DATASETS_RETRIEVE:
         logger.info("Generating ground truth preferences for dataset: %s", dataset_name)
         ground_truth_model = generate_ground_truth(

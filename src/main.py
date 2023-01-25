@@ -38,6 +38,12 @@ def parse_option() -> argparse.ArgumentParser:
         help="Root folder where the MovieLens-1M datasets, models and plots are saved",
     )
     parser.add_argument(
+        "--plots_dir",
+        type=str,
+        default=config.PLOTS_DIR,
+        help="Folder where the experiments plots are saved",
+    )
+    parser.add_argument(
         "--recommenders_file_name",
         type=str,
         default="model",
@@ -63,10 +69,11 @@ def parse_option() -> argparse.ArgumentParser:
     # transform string paths into pathlib.Path objects and create folders
     for dataset in ["lastfm", "movielens"]:
         arg_name = f"{dataset}_dir"
-        for destination in ["data", "models", "plots"]:
+        for destination in config.assets_dir:
             folder = Path(getattr(args, arg_name)) / destination
             folder.mkdir(parents=True, exist_ok=True)
             setattr(args, f"{dataset}_{destination}_dir", folder)
+    Path(args.plots_dir).mkdir(parents=True, exist_ok=True)
 
     return args
 

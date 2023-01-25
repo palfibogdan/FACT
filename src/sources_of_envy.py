@@ -1,12 +1,12 @@
 import logging
 from typing import Dict, Sequence, Tuple
 
-import implicit
 import numpy as np
 
 import config
-import constants
+import plot
 import recommender
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -30,24 +30,16 @@ def delta_envy(utilities: np.ndarray) -> np.ndarray:
         utilities: A 2D array of utility scores, of shape (#users, #users).
 
     Returns:
-        The maximal envy degree of each user in `utilities`.
+        The maximal envy degree of each user in `utilities`, 1D vector.
     """
     # get the maximum utility of each user
     max_envy_values = utilities.max(axis=1)
     # take the difference between the maximal utility of each user and the
     # current user's utility
     delta_envious = max_envy_values - utilities.diagonal()
-    # set negative delta envy to 0
+    # set negative delta envy to 0 NOTE should be unnecessary
     delta_envious[delta_envious < 0] = 0.0
     return delta_envious
-    # """
-    # M - set of users {m, n1, n2, ...}
-    # Utilities - matrix - utilities for each user for each policy
-    # """
-    # for baseline_user in M:
-    #     max_utility = np.max(utilities[baseline_user])
-    #     deltas.append(max(max_utility - utilities[baseline_user], 0))
-    # return np.array(deltas)
 
 
 def get_envy_metrics(utilities: np.ndarray, eps: float) -> Tuple[float, float]:
@@ -64,20 +56,13 @@ def get_envy_metrics(utilities: np.ndarray, eps: float) -> Tuple[float, float]:
     """
     deltas = delta_envy(utilities)
     return np.mean(deltas), np.mean(deltas > eps)
-    # """
-    # M - set of users {m, n1, n2, ...}
-    # Utilities - matrix - utilities for each user for each policy
-    # eps - scalar
-    # """
-    # deltas = get_deltas(M, utilities)
 
 
-def run_experiment_5_1_1(
-    filenames: Sequence[str],
+def experiment_5_1_1(
+    recommender_filenames: Sequence[str],
     ground_truth: np.ndarray,
     eps: float,
     temperature: float,
-    rng: np.random.Generator,
 ) -> Dict[str, Dict[int, np.ndarray]]:
     """
     Loads trained recommendation system models, gets the utility matrix given by
@@ -87,52 +72,71 @@ def run_experiment_5_1_1(
     number of factors
     """
 
+    # NOTE should we rescale the raw ground_truths or apply softmax first? the
+    # min and max stay the same, overall scores are different but scaled equally
+    # though. The paper does not mention softmax first, let's see what the
+    # numerical results are
+    ground_truth_probs = utils.softmax(ground_truth, temperature=temperature)
+    # ground_truth_rescaled = utils.minmax_scale(ground_truth_probs)
+    ground_truth_rescaled = ground_truth
+
     # dictionary to store the metrics by factors, easy to use with pandas
     metrics_dict = {"mean_envy": {}, "prop_eps_envy": {}}
 
-    for filename in filenames:
+    for filename in recommender_filenames:
 
-        # load recommender system model
-        recommender = implicit.cpu.als.AlternatingLeastSquares.load(filename)
+        # load recommender_system_model
+        recommender_model = recommender.load_recommeder_model(filename)
 
         # 2D: recommendation scores for each item per each user
-        recommender_preferences = recommender.user_factors @ recommender.item_factors.T
-
-        # get one-hot encoded recommendations
-        recommendations = rl.user_policy_recommendation(
-            recommender_preferences, temperature, rng
+        recommender_preferences = recommender.get_preferences(recommender_model)
+        # convert to probabilities
+        recommender_probs = utils.softmax(
+            recommender_preferences, temperature=temperature
         )
-        # # one round of recommendations for each user
-        # recommendations, recommendation_probs = rl.recommendation_policy(
-        #     recommender_probs, temperature, rng
-        # )
-        # get (expected) rewards for recommendations
-        # rewards = rl.get_reward(recommendations, ground_truth_rescaled)
+
         # get utilities: recommender prob of selected item * ground truth
         # expected reward for that item
         utilities = compute_utilities(recommender_probs, ground_truth_rescaled)
+
         # compute the required metrics and store them in a dictionary for each
         # latent factor
         mean_envy, prop_envy_users = get_envy_metrics(utilities, eps)
-        metrics_dict["mean_envy"][recommender.factors] = mean_envy
-        metrics_dict["prop_eps_envy"][recommender.factors] = prop_envy_users
+        metrics_dict["mean_envy"][recommender_model.factors] = mean_envy
+        metrics_dict["prop_eps_envy"][recommender_model.factors] = prop_envy_users
 
     return metrics_dict
 
 
 def do_envy_from_mispecification(
-    lastfm_data_dir=config.LASTFM_DATA_DIR,
+    recommenders_file_name: str = "model",
     lastfm_models_dir=config.LASTFM_RECOMMENDER_DIR,
-    lastfm_plots_dir=config.LASTFM_PLOTS_DIR,
-    movielens_data_dir=config.MOVIELENS_DATA_DIR,
     movielens_models_dir=config.MOVIELENS_RECOMMENDER_DIR,
-    movielens_plots_dir=config.MOVIELENS_PLOTS_DIR,
-    rng: np.random.Generator = None,
+    plots_dir=config.PLOTS_DIR,
     **_,
-):
-    # TODO finish this
-    recommender.do_envy_from_mispecification(
-        ...,
-        ground_truth_hparams={"metric": "map", **constants.ground_truth_hparams},
-        recommender_hparams={"metric": "map", **constants.recommender_hparams},
+) -> Dict[str, Dict[str, Dict[int, np.ndarray]]]:
+    epsilon, temperature = 0.05, 5
+
+    lastfm_recommenders = lastfm_models_dir.glob(
+        f"{recommenders_file_name}_factors*.npz"
     )
+    lastfm_ground_truth = recommender.load_preferences(
+        lastfm_models_dir / f"{recommenders_file_name}.npz"
+    )
+    lastfm_metrics = experiment_5_1_1(
+        lastfm_recommenders, lastfm_ground_truth, epsilon, temperature
+    )
+
+    movielens_recommenders = movielens_models_dir.glob(
+        f"{recommenders_file_name}_factors*.npz"
+    )
+    movielens_ground_truth = recommender.load_preferences(
+        movielens_models_dir / f"{recommenders_file_name}.npz"
+    )
+    movielens_metrics = experiment_5_1_1(
+        movielens_recommenders, movielens_ground_truth, epsilon, temperature
+    )
+
+    # plot.plot_5_1_1(lastfm_metrics, movielens_metrics, plots_dir)
+
+    return {"lastfm": lastfm_metrics, "movielens": movielens_metrics}
