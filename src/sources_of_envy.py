@@ -1,12 +1,12 @@
 import logging
 from typing import Dict, Sequence, Tuple
 
+import implicit
 import numpy as np
 
 import config
 import constants
 import recommender
-import utils
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +30,24 @@ def delta_envy(utilities: np.ndarray) -> np.ndarray:
         utilities: A 2D array of utility scores, of shape (#users, #users).
 
     Returns:
-        The maximal envy degree of each user in `utilities`, 1D vector.
+        The maximal envy degree of each user in `utilities`.
     """
     # get the maximum utility of each user
     max_envy_values = utilities.max(axis=1)
     # take the difference between the maximal utility of each user and the
     # current user's utility
     delta_envious = max_envy_values - utilities.diagonal()
-    # set negative delta envy to 0, NOTE should be unnecessary
+    # set negative delta envy to 0
     delta_envious[delta_envious < 0] = 0.0
     return delta_envious
+    # """
+    # M - set of users {m, n1, n2, ...}
+    # Utilities - matrix - utilities for each user for each policy
+    # """
+    # for baseline_user in M:
+    #     max_utility = np.max(utilities[baseline_user])
+    #     deltas.append(max(max_utility - utilities[baseline_user], 0))
+    # return np.array(deltas)
 
 
 def get_envy_metrics(utilities: np.ndarray, eps: float) -> Tuple[float, float]:
@@ -56,9 +64,15 @@ def get_envy_metrics(utilities: np.ndarray, eps: float) -> Tuple[float, float]:
     """
     deltas = delta_envy(utilities)
     return np.mean(deltas), np.mean(deltas > eps)
+    # """
+    # M - set of users {m, n1, n2, ...}
+    # Utilities - matrix - utilities for each user for each policy
+    # eps - scalar
+    # """
+    # deltas = get_deltas(M, utilities)
 
 
-def experiment_5_1_1(
+def run_experiment_5_1_1(
     filenames: Sequence[str],
     ground_truth: np.ndarray,
     eps: float,
@@ -73,24 +87,20 @@ def experiment_5_1_1(
     number of factors
     """
 
-    # NOTE should we rescale the raw ground_truths or apply softmax first? the
-    # min and max stay the same, overall scores are different but scaled equally
-    # though. The paper does not mention softmax first, let's see what the
-    # numerical results are
-    ground_truth_probs = utils.softmax(ground_truth, temperature=temperature)
-    ground_truth_rescaled = utils.minmax_scale(ground_truth_probs)
-
     # dictionary to store the metrics by factors, easy to use with pandas
     metrics_dict = {"mean_envy": {}, "prop_eps_envy": {}}
 
     for filename in filenames:
+
         # load recommender system model
-        recommender_model = recommender.get_recommeder_model(filename)
+        recommender = implicit.cpu.als.AlternatingLeastSquares.load(filename)
+
         # 2D: recommendation scores for each item per each user
-        recommender_preferences = recommender.get_preferences(recommender_model)
-        # convert to probabilities
-        recommender_probs = utils.softmax(
-            recommender_preferences, temperature=temperature
+        recommender_preferences = recommender.user_factors @ recommender.item_factors.T
+
+        # get one-hot encoded recommendations
+        recommendations = rl.user_policy_recommendation(
+            recommender_preferences, temperature, rng
         )
         # # one round of recommendations for each user
         # recommendations, recommendation_probs = rl.recommendation_policy(
@@ -104,8 +114,8 @@ def experiment_5_1_1(
         # compute the required metrics and store them in a dictionary for each
         # latent factor
         mean_envy, prop_envy_users = get_envy_metrics(utilities, eps)
-        metrics_dict["mean_envy"][recommender_model.factors] = mean_envy
-        metrics_dict["prop_eps_envy"][recommender_model.factors] = prop_envy_users
+        metrics_dict["mean_envy"][recommender.factors] = mean_envy
+        metrics_dict["prop_eps_envy"][recommender.factors] = prop_envy_users
 
     return metrics_dict
 

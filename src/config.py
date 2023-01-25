@@ -8,7 +8,7 @@ LASTFM_DIR = ROOT_DIR / "lastfm"
 MOVIELENS_DIR = ROOT_DIR / "movielens"
 
 LASTFM_DATA_DIR = LASTFM_DIR / "data"
-MOVIELENS_DATA_DIR = MOVIELENS_DIR / "data" / "ml-1m"
+MOVIELENS_DATA_DIR = MOVIELENS_DIR / "data"
 
 # Save best models for all factor hyperparmeter values
 LASTFM_RECOMMENDER_DIR = LASTFM_DIR / "model"

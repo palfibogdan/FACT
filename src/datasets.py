@@ -60,10 +60,16 @@ def get_lastfm(
 def get_movielens(
     topk_users=2000,
     topk_movies=2500,
-    dataset_dir: Path = config.MOVIELENS_DATA_DIR.parent,
+    dataset_dir: Path = config.MOVIELENS_DATA_DIR,
     **_
 ) -> pd.DataFrame:
     download_dataset(config.MOVIELENS_URL, dataset_dir)
+    # move files from dataset_dir/ml-1M folder to dataset_dir and delete ml-1M
+    ml_1m = dataset_dir / "ml-1m"
+    if ml_1m.exists():
+        for f in ml_1m.iterdir():
+            f.rename(dataset_dir / f.name)
+        ml_1m.rmdir()
     # headers from data/MovieLens/README
     column_names = ["user", "item", "score", "timestamp"]
     user_item_df = pd.read_csv(

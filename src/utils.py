@@ -45,16 +45,18 @@ def one_hot(labels: np.ndarray, max_label: int) -> np.ndarray:
     return one_hot_mat
 
 
-def softmax(preferences: np.ndarray, temperature: float = 1.0) -> np.ndarray:
+def preferences_to_probs(
+    preferences: np.ndarray, temperature: float = 1.0
+) -> np.ndarray:
     """
     Transforms preference scores into probabilities by applying softmax.
 
     Args:
-        preferences: 1 or 2D array of unbounded scores.
+        preferences: 2D array of unbounded scores.
         temperature: Optional temperature parameter for softmax, default: 1.0.
 
     Returns:
-        An array of probabilities computed row-wise from `preferences`.
+        A matrix of probabilities computed row-wise from `preferences`.
     """
     if len(preferences.shape) < 2:
         preferences = preferences[None, :]

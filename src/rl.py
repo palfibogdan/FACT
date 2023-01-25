@@ -27,3 +27,4 @@
 #     if len(recommendations.shape) < 2:
 #         recommendations = recommendations[:, None]
 #     return np.take_along_axis(ground_truth_rewards, recommendations, 1)
+
