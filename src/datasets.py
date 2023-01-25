@@ -14,7 +14,6 @@ import config
 logger = logging.getLogger(__name__)
 
 
-# FIXME halts while downloading lastfm!
 def download_dataset(dataset_url: str, dataset_dir: str):
     if os.path.exists(dataset_dir) and len(os.listdir(dataset_dir)) > 1:
         logger.info("%s already exists, abort download", dataset_dir)
@@ -53,7 +52,7 @@ def get_lastfm(
     # drops only columns of user_item_df which do not appear in top_k_artists
     user_item_df = user_item_df[user_item_df.columns.intersection(top_k_artists)]
     assert (user_item_df.columns == top_k_artists.sort_values()).all()
-    user_item_df = np.log(user_item_df, where=user_item_df > 0)  # log-trasform
+    user_item_df = np.log(user_item_df, where=user_item_df > 0)  # log-transform
     return user_item_df
 
 
@@ -89,8 +88,9 @@ def get_movielens(
     topk_items = bool_df.sum(axis=0).sort_values(ascending=False).index[:topk_movies]
     user_item_df = user_item_df[user_item_df.columns.intersection(topk_items)]
     # remap ratings {3, 4, 5} to a range of 5, and set ratings < 3 to 0
-    ratings_remap = dict(zip(range(1, 6), np.linspace(3, 5, 5)))
-    user_item_df = user_item_df.applymap(lambda rating: ratings_remap.get(rating, 0))
+    # ratings_remap = dict(zip(range(1, 6), np.linspace(3, 5, 5)))
+    # user_item_df = user_item_df.applymap(lambda rating: ratings_remap.get(rating, 0))
+    user_item_df[user_item_df < 3] = 0
     return user_item_df
 
 

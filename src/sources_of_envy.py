@@ -6,10 +6,18 @@ import numpy as np
 import config
 import constants
 import recommender
-import rl
 import utils
 
 logger = logging.getLogger(__name__)
+
+
+def compute_utilities(
+    reward_prob: np.ndarray, expected_reward: np.ndarray
+) -> np.ndarray:
+    # return a utility matrix where element i, j  represents
+    # the utility of user i with the policies j
+    # the utility of each user is on the diagonal of the returned matrix
+    return expected_reward @ reward_prob.T
 
 
 def delta_envy(utilities: np.ndarray) -> np.ndarray:
@@ -92,7 +100,7 @@ def experiment_5_1_1(
         # rewards = rl.get_reward(recommendations, ground_truth_rescaled)
         # get utilities: recommender prob of selected item * ground truth
         # expected reward for that item
-        utilities = rl.compute_utilities(recommender_probs, ground_truth_rescaled)
+        utilities = compute_utilities(recommender_probs, ground_truth_rescaled)
         # compute the required metrics and store them in a dictionary for each
         # latent factor
         mean_envy, prop_envy_users = get_envy_metrics(utilities, eps)

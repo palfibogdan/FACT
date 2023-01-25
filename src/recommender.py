@@ -81,7 +81,7 @@ def search_ground_truth(
     train_mat: sparse.csr_array,
     valid_mat: sparse.csr_array,
     base_save_path: Path,
-    metric: str = "map",
+    metric: str = "ndcg",
     **_,
 ) -> implicit.als.AlternatingLeastSquares:
     """
@@ -139,7 +139,7 @@ def search_recommender(
     train_mat: sparse.csr_array,
     valid_mat: sparse.csr_array,
     base_save_path: Path,
-    metric: str = "map",
+    metric: str = "ndcg",
     **_,
 ):
     """
@@ -174,7 +174,6 @@ def search_recommender(
         save_hyperparams_and_metrics(
             hparams_save_path, best_dict["hparams"], best_dict["metrics"], metric
         )
-        # for hparams in hyperparams_inner_flat:
 
 
 # NOTE increase the value of seed with next() so that calling the function twice
@@ -194,6 +193,38 @@ def csr_dataset_splits(
     return train_csr, valid_csr, test_csr
 
 
+def recommender_input_data(
+    ground_truth: np.ndarray,
+    seed_gen: utils.Seed,
+    rng: np.random.Generator,
+    downsampling_ratio: float = None,
+) -> Tuple[sparse.csr_array, ...]:
+
+    if downsampling_ratio is None:
+        logger.info("Take ground truth input for recommender without downsampling")
+        return csr_dataset_splits(ground_truth, seed_gen)
+
+    logger.info(
+        "Downsampling the ground truth data to %d% to train the recommender",
+        downsampling_ratio * 100,
+    )
+    # we mask 80% of the ground truth data because in section 5.1 they say:
+    # the simulated recommender system estimates relevance scores using low-rank
+    # matrix completion (Bell and Sejnowski 1995) on a training sample of 20% of
+    # the ground truth preferences
+    indices = [
+        (i, j)
+        for i in range(ground_truth.shape[0])
+        for j in range(ground_truth.shape[1])
+    ]
+    sample = rng.choice(indices, size=int(0.2 * len(indices)), replace=False)
+    ground_truth_masked = np.zeros_like(ground_truth)
+    ground_truth_masked[sample[:, 0], sample[:, 1]] = ground_truth[
+        sample[:, 0], sample[:, 1]
+    ]
+    return csr_dataset_splits(ground_truth_masked, seed_gen)
+
+
 def generate_ground_truth(
     dataset_name: str, base_save_path: Path, seed_gen: utils.Seed, **kwargs
 ) -> implicit.als.AlternatingLeastSquares:
@@ -209,6 +240,7 @@ def generate_recommenders(
     rng: np.random.Generator,
     dataset_name: str = None,
     ground_truth_model_path: Path = None,
+    downsampling_ratio: float = None,
     **kwargs,
 ):
     if ground_truth_model_path is not None and ground_truth_model_path.exists():
@@ -227,22 +259,8 @@ def generate_recommenders(
         logger.error("No recommender system implemented for dataset %s", dataset_name)
         raise NotImplementedError
 
-    # we mask 80% of the ground truth data because in section 5.1 they say:
-    # the simulated recommender system estimates relevance scores using low-rank
-    # matrix completion (Bell and Sejnowski 1995) on a training sample of 20% of
-    # the ground truth preferences
-    logger.info("Downsampling the ground truths to 20%...")
-    indices = [
-        (i, j)
-        for i in range(ground_truth.shape[0])
-        for j in range(ground_truth.shape[1])
-    ]
-    sample = rng.choice(indices, size=int(0.2 * len(indices)), replace=False)
-    ground_truth_masked = np.zeros_like(ground_truth)
-    ground_truth_masked[sample[:, 0], sample[:, 1]] = ground_truth[
-        sample[:, 0], sample[:, 1]
-    ]
-
-    train_csr, valid_csr, _ = csr_dataset_splits(ground_truth_masked, seed_gen)
+    train_csr, valid_csr, test_csr = recommender_input_data(
+        ground_truth, seed_gen, rng, downsampling_ratio=downsampling_ratio
+    )
     logger.info("Start fitting the recommender models.")
     search_recommender(train_csr, valid_csr, base_save_path, **kwargs)

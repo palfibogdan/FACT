@@ -14,6 +14,7 @@ recommender_hparams = {
     "alpha": [10 ** (i - 1) for i in range(4)],
 }
 
+# # testing
 # ground_truth_hparams = {
 #     "factors": [4, 8],
 #     "regularization": [0.1, 1],
