@@ -1,4 +1,5 @@
 import logging
+from typing import Generator
 
 import numpy as np
 import scipy
@@ -57,4 +58,26 @@ def preferences_to_probs(
     Returns:
         A matrix of probabilities computed row-wise from `preferences`.
     """
-    return scipy.special.softmax(preferences / temperature, axis=1)
+    if len(preferences.shape) < 2:
+        preferences = preferences[None, :]
+    return scipy.special.softmax(preferences / temperature, axis=1).squeeze()
+
+
+def minmax_scale(a: np.ndarray) -> np.ndarray:
+    if len(a.shape) < 2:
+        a = a[None, :]
+    min_ = a.min(axis=1)[:, None]
+    return np.squeeze((a - min_) / (a.max(axis=1)[:, None] - min_))
+
+
+Seed = Generator[int, None, None]
+
+
+def SequenceGenerator(start: int) -> Seed:
+    """
+    A simple infinite sequence of integers. Call next() on it when e.g. an
+    actual seed should be used.
+    """
+    while True:
+        yield start
+        start += 1

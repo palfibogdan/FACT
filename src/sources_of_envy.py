@@ -1,7 +1,12 @@
+import logging
 from typing import Dict, Sequence, Tuple
 
 import implicit
 import numpy as np
+
+import config
+import constants
+import recommender
 
 import rl
 
@@ -13,6 +18,8 @@ def get_utilities(expected_rewards, recommendations):
     # utilities = ground_truth_preferences @ recommendations.T
     utilities = expected_rewards @ recommendations.T
     return utilities
+
+logger = logging.getLogger(__name__)
 
 
 def delta_envy(utilities: np.ndarray) -> np.ndarray:
@@ -110,40 +117,19 @@ def run_experiment_5_1_1(
     return metrics_dict
 
 
-# # Lists for storing the average envy and proportion of eps-envious users for each number of factors
-#     avg_envy_list = []
-#     prop_envy_users_list = []
-
-#     temperature = 5
-#     rng = np.random.default_rng(constants.SEED)
-#     ground_truth_lastfm = np.load(config.MODELS_DIR / "ground_truth_lastfm.npy")
-
-#     # set of users
-#     M = np.arrange(num_users)
-
-#     for filename in filenames:
-
-#         # load recommender system model
-#         recommender = np.load(config.MODELS_DIR / filename)
-
-#         # 2D: recommendation scores for each item per each user
-#         recommender_preferences = recommender.user_preferences @ recommender.item_preferences.T
-
-#         # get indexes of recommended items given by the model
-#         recommendations = rl.user_policy_recommendation(recommender_preferences, temperature, rng)
-
-#         # 2D: for each user, what items are truly recommended
-#         true_recommendations = rl.generate_true_recommendation(ground_truth_lastfm, temperature, rng)
-
-#         #TODO fix this: expected rewards are 1D array, but true_recommendations is 2D
-#         #TODO See how to get these two variables
-#         expected_rewards = np.take_along_axis(true_recommendations, recommendations[:, None], axis=1).squeeze()
-#         item_probabilities = recommendation_probs(recommender_preferences, temperature)
-
-#         utility_matrix = get_utilities(expected_rewards, item_probabilities)
-#         average_envy, prop_envy_users = get_average_proportion(M, utility_matrix, eps)
-
-#         avg_envy_list.append(average_envy)
-#         prop_envy_users_list.append(prop_envy_users)
-
-#     return avg_envy_list, prop_envy_users_list
+def do_envy_from_mispecification(
+    lastfm_data_dir=config.LASTFM_DATA_DIR,
+    lastfm_models_dir=config.LASTFM_RECOMMENDER_DIR,
+    lastfm_plots_dir=config.LASTFM_PLOTS_DIR,
+    movielens_data_dir=config.MOVIELENS_DATA_DIR,
+    movielens_models_dir=config.MOVIELENS_RECOMMENDER_DIR,
+    movielens_plots_dir=config.MOVIELENS_PLOTS_DIR,
+    rng: np.random.Generator = None,
+    **_,
+):
+    # TODO finish this
+    recommender.do_envy_from_mispecification(
+        ...,
+        ground_truth_hparams={"metric": "map", **constants.ground_truth_hparams},
+        recommender_hparams={"metric": "map", **constants.recommender_hparams},
+    )

@@ -1,15 +1,14 @@
 import itertools as it
 import logging
 import pprint
-from copy import deepcopy
-from typing import Dict, Sequence
+from pathlib import Path
+from typing import Dict, Sequence, Tuple
 
 import implicit
 import numpy as np
 from implicit import evaluation
 from scipy import sparse
 
-import config
 import constants
 import datasets
 import utils
@@ -17,12 +16,73 @@ import utils
 logger = logging.getLogger(__name__)
 
 
-def recommender_grid_search(
-    train_mat: sparse.csr_matrix,
-    valid_mat: sparse.csr_matrix,
-    best_model_paths: Sequence[str],
+def save_hyperparams_and_metrics(
+    filename: Path, hparams: dict, metrics: dict, metric_used: str
+):
+    header = f"{','.join(list(hparams) + list(metrics))},used"
+    content = list(hparams.values()) + list(metrics.values()) + [metric_used]
+    content = ",".join(list(map(str, content)))
+    with open(filename, "w") as fd:
+        fd.write(header + "\n")
+        fd.write(content + "\n")
+    logger.debug("Saved best model hyperparams and metrics to %s", filename)
+
+
+def load_recommeder_model(filename: str) -> implicit.als.AlternatingLeastSquares:
+    return implicit.cpu.als.AlternatingLeastSquares.load(filename)
+
+
+def get_preferences(model: implicit.als.AlternatingLeastSquares) -> np.ndarray:
+    user_factors, item_factors = model.user_factors, model.item_factors
+    if implicit.gpu.HAS_CUDA:
+        user_factors, item_factors = user_factors.to_numpy(), item_factors.to_numpy()
+    return user_factors @ item_factors.T
+
+
+# NOTE each combination of hparams in hparams_flat should be ordered according
+# to hparams_names
+def search_best_model(
+    train_mat: sparse.csr_array,
+    valid_mat: sparse.csr_array,
+    hparams_names: Sequence[str],
+    hparams_flat: Sequence[float],
+    metric: str,
+) -> Dict[str, dict]:
+    best_metrics, best_model, best_hparams = {}, None, None
+
+    for hparams in hparams_flat:
+        model = implicit.als.AlternatingLeastSquares(
+            **dict(zip(hparams_names, hparams))
+        )
+        model.fit(train_mat)
+        metrics = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)
+        score, best_score = metrics[metric], best_metrics.get(metric, -1.0)
+        if score > best_score:
+            logger.info(
+                "Best model found! Old %s: %f new %s: %f hparams: %s",
+                metric,
+                best_score,
+                metric,
+                score,
+                hparams,
+            )
+            best_metrics = metrics
+            best_model = model
+            best_hparams = hparams
+
+    return {
+        "model": best_model,
+        "hparams": dict(zip(hparams_names, best_hparams)),
+        "metrics": best_metrics,
+    }
+
+
+def search_ground_truth(
+    train_mat: sparse.csr_array,
+    valid_mat: sparse.csr_array,
+    base_save_path: Path,
     metric: str = "map",
-    **hyperparams: Dict[str, Sequence],
+    **_,
 ) -> implicit.als.AlternatingLeastSquares:
     """
     Fits a recommender system on a training set using matrix factorization as
@@ -32,11 +92,13 @@ def recommender_grid_search(
 
     Args:
         train_mat: User-item training set to fit the matrix factors,
-                   in scipy.sparse.csr_matrix format.
+                   in scipy.sparse.csr_array format.
         valid_mat: User-item validation set, evaluated according to `metric`,
-                   in scipy.sparse.csr_matrix format.
-        best_model_paths: List containing 2 paths. The best model is saved in
-                          the first path, its hyperparameters in the second one.
+                   in scipy.sparse.csr_array format.
+        base_save_path: The stem (complete filename without extension) of the
+                        file the best model is saved to. The model is saved to
+                        `base_save_path`.npy, and the hypeparameters and
+                        evaluation metrics to  `base_save_path`_hparams.txt.
         metric: The evaluation metric used to test the trained model, provided
                 in the implicit/evaluation.pyx module. Supported values are:
                 ['precision', map', 'ndcg', 'auc']. Defaults to 'map'.
@@ -49,50 +111,36 @@ def recommender_grid_search(
         factors stored in `model.user_factors` and `model.item_factors`.
     """
 
+    hyperparams = constants.ground_truth_hparams
     logger.info("Hyperparameters in grid search:")
     logger.info(pprint.pformat(hyperparams))
-    hyperparams_flat = list(it.product(*hyperparams.values()))
 
-    best_model_path, best_hparams_path = best_model_paths
-    best_score, best_model, best_hparams = -1.0, None, None
+    best_dict = search_best_model(
+        train_mat,
+        valid_mat,
+        hyperparams.keys(),
+        list(it.product(*hyperparams.values())),
+        metric,
+    )
 
-    for i, hparams in enumerate(hyperparams_flat):
-        model = implicit.als.AlternatingLeastSquares(
-            **dict(zip(hyperparams.keys(), hparams))
-        )
-        model.fit(train_mat)
-        score = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)[metric]
-        if score > best_score:
-            logger.info(
-                "%d: Best model found! Old %s: %f new %s: %f hparams: %s",
-                i,
-                metric,
-                best_score,
-                metric,
-                score,
-                hparams,
-            )
-            best_score = score
-            best_model = deepcopy(model)
-            best_hparams = hparams
+    model_save_path = f"{base_save_path}.npz"
+    best_dict["model"].save(model_save_path)
+    logger.debug("Saved best model to %s", model_save_path)
 
-    best_model.save(best_model_path)
-    logger.debug("Saved best model to %s", best_model_path)
-    with open(best_hparams_path, "w") as fd:
-        fd.write("factor,regularizer,alpha,metric,score\n")
-        fd.write(f"{','.join(list(map(str, best_hparams + (metric, best_score))))}\n")
-    logger.debug("Saved best model hyperparams to %s", best_hparams_path)
-    return best_model
+    hparams_save_path = f"{base_save_path}_hparams.txt"
+    save_hyperparams_and_metrics(
+        hparams_save_path, best_dict["hparams"], best_dict["metrics"], metric
+    )
+
+    return best_dict["model"]
 
 
-# NOTE best_factors_path should contain the dataset in its name to avoid override
-# NOTE does not save the best hyperparameters for each best model found
-def best_model_each_factor(
-    train_mat: sparse.csr_matrix,
-    valid_mat: sparse.csr_matrix,
-    best_factors_path: str,
+def search_recommender(
+    train_mat: sparse.csr_array,
+    valid_mat: sparse.csr_array,
+    base_save_path: Path,
     metric: str = "map",
-    **hyperparams: Dict[str, Sequence],
+    **_,
 ):
     """
     This function trains a model for each factor and saves the best model for
@@ -100,46 +148,101 @@ def best_model_each_factor(
     To be used with the recommender models.
     """
 
-    factors = hyperparams["factors"]
-    regularization = hyperparams["regularization"]
-    alpha = hyperparams["alpha"]
+    hyperparams = constants.recommender_hparams
+    logger.info("Hyperparameters in recommender grid search:")
+    logger.info(pprint.pformat(hyperparams))
+
+    hyperparams_inner = hyperparams.copy()
+    factors = hyperparams_inner.pop("factors")
+    hyperparams_inner_flat = list(it.product(*hyperparams_inner.values()))
 
     # save the best model for each factor
     for factor in factors:
-        best_score, best_model = -1.0, None
-        for reg in regularization:
-            for a in alpha:
-                hparams = (factor, reg, a)
-                model = implicit.als.AlternatingLeastSquares(
-                    factors=factor, regularization=reg, alpha=a
-                )
-                model.fit(train_mat)
-                score = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)[
-                    metric
-                ]
-                if score > best_score:
-                    logger.info(
-                        f"Best model found (for {factor} factors) ! Old {metric}: {best_score} new {metric}: {score} hparams: {hparams}"
-                    )
-                    best_score = score
-                    best_model = deepcopy(model)
+        # NOTE (factor, ) + hparams relies on the keys of hyperparams to be,
+        # in order, factors,regularization,alpha; there is an easy fix for
+        # this not implemented rn
+        hparams = list((factor,) + hp for hp in hyperparams_inner_flat)
+        best_dict = search_best_model(
+            train_mat, valid_mat, hyperparams.keys(), hparams, metric
+        )
 
-        name = f"model_{factor}_factors"
+        model_save_path = f"{base_save_path}_factors_{factor}.npz"
+        best_dict["model"].save(model_save_path)
+        logger.debug("Saved best model to %s", model_save_path)
 
-        path = best_factors_path / name
-        best_model.save(path)
+        hparams_save_path = f"{base_save_path}_factors_{factor}_hparams.txt"
+        save_hyperparams_and_metrics(
+            hparams_save_path, best_dict["hparams"], best_dict["metrics"], metric
+        )
+        # for hparams in hyperparams_inner_flat:
 
 
-def create_preferences(
-    lastfm_csr: sparse.csr_matrix, seed: int, savepaths: Sequence[str], **kwargs
+# NOTE increase the value of seed with next() so that calling the function twice
+# yields different results; look at how an integer seed is always reinitialized
+# in implicit.evaluation.train_test_split
+def csr_dataset_splits(
+    dataset: np.ndarray, seed_gen: utils.Seed
+) -> Tuple[sparse.csr_array, ...]:
+    dataset_csr = sparse.csr_array(dataset)
+    logger.info("Splitting the dataset into 70/10/20% train/validation/test splits...")
+    train_csr, tmp_csr = evaluation.train_test_split(
+        dataset_csr, train_percentage=0.7, random_state=next(seed_gen)
+    )
+    valid_csr, test_csr = evaluation.train_test_split(
+        tmp_csr, train_percentage=2 / 3, random_state=next(seed_gen)
+    )
+    return train_csr, valid_csr, test_csr
+
+
+def generate_ground_truth(
+    dataset_name: str, base_save_path: Path, seed_gen: utils.Seed, **kwargs
 ) -> implicit.als.AlternatingLeastSquares:
-    # split into 0.7 train 0.2 val 0.1 test
-    train_csr, tmp_csr = implicit.evaluation.train_test_split(
-        lastfm_csr, train_percentage=0.7, random_state=seed
-    )
-    valid_csr, test_csr = implicit.evaluation.train_test_split(
-        tmp_csr, train_percentage=2 / 3, random_state=seed
-    )
-    # create ground truth preferences
-    model = recommender_grid_search(train_csr, valid_csr, savepaths, **kwargs)
-    return model
+    logger.info("Loading and preprocessing dataset %s...", dataset_name)
+    dataset = datasets.get_dataset(dataset_name, **kwargs)
+    train_csr, valid_csr, _ = csr_dataset_splits(dataset.values, seed_gen)
+    return search_ground_truth(train_csr, valid_csr, base_save_path, **kwargs)
+
+
+def generate_recommenders(
+    base_save_path: Path,
+    seed_gen: utils.Seed,
+    rng: np.random.Generator,
+    dataset_name: str = None,
+    ground_truth_model_path: Path = None,
+    **kwargs,
+):
+    if ground_truth_model_path is not None and ground_truth_model_path.exists():
+        logger.info("Loading ground truth preferences from %s", ground_truth_model_path)
+        ground_truth = get_preferences(load_recommeder_model(ground_truth_model_path))
+    elif dataset_name is not None and dataset_name in datasets.DATASETS_RETRIEVE:
+        logger.info("Generating ground truth preferences for dataset: %s", dataset_name)
+        ground_truth_model = generate_ground_truth(
+            dataset_name,
+            base_save_path,
+            seed_gen,
+            **kwargs,
+        )
+        ground_truth = get_preferences(ground_truth_model)
+    else:
+        logger.error("No recommender system implemented for dataset %s", dataset_name)
+        raise NotImplementedError
+
+    # we mask 80% of the ground truth data because in section 5.1 they say:
+    # the simulated recommender system estimates relevance scores using low-rank
+    # matrix completion (Bell and Sejnowski 1995) on a training sample of 20% of
+    # the ground truth preferences
+    logger.info("Downsampling the ground truths to 20%...")
+    indices = [
+        (i, j)
+        for i in range(ground_truth.shape[0])
+        for j in range(ground_truth.shape[1])
+    ]
+    sample = rng.choice(indices, size=int(0.2 * len(indices)), replace=False)
+    ground_truth_masked = np.zeros_like(ground_truth)
+    ground_truth_masked[sample[:, 0], sample[:, 1]] = ground_truth[
+        sample[:, 0], sample[:, 1]
+    ]
+
+    train_csr, valid_csr, _ = csr_dataset_splits(ground_truth_masked, seed_gen)
+    logger.info("Start fitting the recommender models.")
+    search_recommender(train_csr, valid_csr, base_save_path, **kwargs)
