@@ -17,14 +17,6 @@ import utils
 logger = logging.getLogger(__name__)
 
 
-def get_recommeder_model(filename: str) -> implicit.als.AlternatingLeastSquares:
-    return implicit.cpu.als.AlternatingLeastSquares.load(filename)
-
-
-def get_preferences(model: implicit.als.AlternatingLeastSquares) -> np.ndarray:
-    return model.user_factors @ model.item_factors.T
-
-
 def recommender_grid_search(
     train_mat: sparse.csr_matrix,
     valid_mat: sparse.csr_matrix,
