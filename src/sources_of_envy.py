@@ -8,18 +8,16 @@ import config
 import constants
 import recommender
 
-import rl
+logger = logging.getLogger(__name__)
 
 
-# TODO ask if this is the right way of computing the utilities
-def get_utilities(expected_rewards, recommendations):
+def compute_utilities(
+    reward_prob: np.ndarray, expected_reward: np.ndarray
+) -> np.ndarray:
     # return a utility matrix where element i, j  represents
     # the utility of user i with the policies j
-    # utilities = ground_truth_preferences @ recommendations.T
-    utilities = expected_rewards @ recommendations.T
-    return utilities
-
-logger = logging.getLogger(__name__)
+    # the utility of each user is on the diagonal of the returned matrix
+    return expected_reward @ reward_prob.T
 
 
 def delta_envy(utilities: np.ndarray) -> np.ndarray:
@@ -104,10 +102,15 @@ def run_experiment_5_1_1(
         recommendations = rl.user_policy_recommendation(
             recommender_preferences, temperature, rng
         )
-
-        # get utilities of each user, shape: #users X #users
-        utilities = get_utilities(ground_truth, recommendations)
-
+        # # one round of recommendations for each user
+        # recommendations, recommendation_probs = rl.recommendation_policy(
+        #     recommender_probs, temperature, rng
+        # )
+        # get (expected) rewards for recommendations
+        # rewards = rl.get_reward(recommendations, ground_truth_rescaled)
+        # get utilities: recommender prob of selected item * ground truth
+        # expected reward for that item
+        utilities = compute_utilities(recommender_probs, ground_truth_rescaled)
         # compute the required metrics and store them in a dictionary for each
         # latent factor
         mean_envy, prop_envy_users = get_envy_metrics(utilities, eps)
