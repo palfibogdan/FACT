@@ -1,2 +1,0 @@
-factor,regularizer,alpha,metric,score
-32,10,10,map,0.1329380157647816
