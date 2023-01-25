@@ -38,6 +38,12 @@ def parse_option() -> argparse.ArgumentParser:
         help="Root folder where the MovieLens-1M datasets, models and plots are saved",
     )
     parser.add_argument(
+        "--recommenders_file_name",
+        type=str,
+        default="model",
+        help="Base file name used to save the ground truth models, recommenders and hyperparameters",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=constants.SEED,
@@ -74,14 +80,14 @@ def main(args: argparse.Namespace):
     import recommender
 
     recommender.generate_recommenders(
-        args.lastfm_models_dir / "model",
+        args.lastfm_models_dir / args.recommenders_file_name,
         seed_seq,
         rng,
         dataset_name="lastfm",
         **kvargs,
     )
     recommender.generate_recommenders(
-        args.movielens_models_dir / "model",
+        args.movielens_models_dir / args.recommenders_file_name,
         seed_seq,
         rng,
         dataset_name="movielens",
