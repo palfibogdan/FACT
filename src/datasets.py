@@ -14,7 +14,6 @@ import config
 logger = logging.getLogger(__name__)
 
 
-# FIXME halts while downloading lastfm!
 def download_dataset(dataset_url: str, dataset_dir: str):
     if os.path.exists(dataset_dir) and len(os.listdir(dataset_dir)) > 1:
         logger.info("%s already exists, abort download", dataset_dir)
