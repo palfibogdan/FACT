@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 
 
-def plot_5_1_1(metrics_dict_last, metrics_dict_movie):
+def plot_5_1_1(metrics_dict_last, metrics_dict_movie, plots_dir: Path):
     fix, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
     # Average envy
@@ -31,3 +33,5 @@ def plot_5_1_1(metrics_dict_last, metrics_dict_movie):
     )
     ax2.set_xlabel("number of factors")
     ax2.set_ylabel("prop. of envious users (ε=0.05)")
+
+    plt.savefig(plots_dir / "envy_model_mispecification.png")

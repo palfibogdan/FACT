@@ -52,7 +52,7 @@ def get_lastfm(
     # drops only columns of user_item_df which do not appear in top_k_artists
     user_item_df = user_item_df[user_item_df.columns.intersection(top_k_artists)]
     assert (user_item_df.columns == top_k_artists.sort_values()).all()
-    user_item_df = np.log(user_item_df, where=user_item_df > 0)  # log-trasform
+    user_item_df = np.log(user_item_df, where=user_item_df > 0)  # log-transform
     return user_item_df
 
 
@@ -60,10 +60,16 @@ def get_lastfm(
 def get_movielens(
     topk_users=2000,
     topk_movies=2500,
-    dataset_dir: Path = config.MOVIELENS_DATA_DIR.parent,
+    dataset_dir: Path = config.MOVIELENS_DATA_DIR,
     **_
 ) -> pd.DataFrame:
     download_dataset(config.MOVIELENS_URL, dataset_dir)
+    # move files from dataset_dir/ml-1M folder to dataset_dir and delete ml-1M
+    ml_1m = dataset_dir / "ml-1m"
+    if ml_1m.exists():
+        for f in ml_1m.iterdir():
+            f.rename(dataset_dir / f.name)
+        ml_1m.rmdir()
     # headers from data/MovieLens/README
     column_names = ["user", "item", "score", "timestamp"]
     user_item_df = pd.read_csv(
@@ -88,8 +94,9 @@ def get_movielens(
     topk_items = bool_df.sum(axis=0).sort_values(ascending=False).index[:topk_movies]
     user_item_df = user_item_df[user_item_df.columns.intersection(topk_items)]
     # remap ratings {3, 4, 5} to a range of 5, and set ratings < 3 to 0
-    ratings_remap = dict(zip(range(1, 6), np.linspace(3, 5, 5)))
-    user_item_df = user_item_df.applymap(lambda rating: ratings_remap.get(rating, 0))
+    # ratings_remap = dict(zip(range(1, 6), np.linspace(3, 5, 5)))
+    # user_item_df = user_item_df.applymap(lambda rating: ratings_remap.get(rating, 0))
+    user_item_df[user_item_df < 3] = 0
     return user_item_df
 
 

@@ -38,6 +38,18 @@ def parse_option() -> argparse.ArgumentParser:
         help="Root folder where the MovieLens-1M datasets, models and plots are saved",
     )
     parser.add_argument(
+        "--plots_dir",
+        type=str,
+        default=config.PLOTS_DIR,
+        help="Folder where the experiments plots are saved",
+    )
+    parser.add_argument(
+        "--recommenders_file_name",
+        type=str,
+        default="model",
+        help="Base file name used to save the ground truth models, recommenders and hyperparameters",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=constants.SEED,
@@ -57,10 +69,11 @@ def parse_option() -> argparse.ArgumentParser:
     # transform string paths into pathlib.Path objects and create folders
     for dataset in ["lastfm", "movielens"]:
         arg_name = f"{dataset}_dir"
-        for destination in ["data", "models", "plots"]:
+        for destination in config.assets_dir:
             folder = Path(getattr(args, arg_name)) / destination
             folder.mkdir(parents=True, exist_ok=True)
             setattr(args, f"{dataset}_{destination}_dir", folder)
+    Path(args.plots_dir).mkdir(parents=True, exist_ok=True)
 
     return args
 
@@ -74,14 +87,14 @@ def main(args: argparse.Namespace):
     import recommender
 
     recommender.generate_recommenders(
-        args.lastfm_models_dir / "model",
+        args.lastfm_models_dir / args.recommenders_file_name,
         seed_seq,
         rng,
         dataset_name="lastfm",
         **kvargs,
     )
     recommender.generate_recommenders(
-        args.movielens_models_dir / "model",
+        args.movielens_models_dir / args.recommenders_file_name,
         seed_seq,
         rng,
         dataset_name="movielens",

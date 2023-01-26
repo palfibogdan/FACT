@@ -1,14 +1,3 @@
-import numpy as np
-
-
-def compute_utilities(
-    reward_prob: np.ndarray, expected_reward: np.ndarray
-) -> np.ndarray:
-    # return a utility matrix where element i, j  represents
-    # the utility of user i with the policies j
-    return expected_reward @ reward_prob.T
-
-
 # from typing import Tuple
 # # NOTE works with both the full user-item preferences matrix and a single user's
 # # preferences, add a batch dimension in the latter case
@@ -38,3 +27,4 @@ def compute_utilities(
 #     if len(recommendations.shape) < 2:
 #         recommendations = recommendations[:, None]
 #     return np.take_along_axis(ground_truth_rewards, recommendations, 1)
+
