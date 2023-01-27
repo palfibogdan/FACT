@@ -175,15 +175,6 @@ def ocef(delta, alpha, epsilon, S, utilities):
             return False, t, reward_history
 
 
-def plot_duration(alphas, duration_per_problem):
-    for problem, duration in enumerate(duration_per_problem):
-        plt.plot(alphas, problem, label=problem)
-    plt.legend()
-    plt.x_label("alpha")
-    plt.y_label("duration")
-    plt.show()
-
-
 def main():
     S = [i for i in range(1, 10)]
     alphas = [i / 10 for i in range(1, 6)]
