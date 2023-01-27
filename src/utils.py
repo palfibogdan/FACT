@@ -65,7 +65,9 @@ def minmax_scale(a: np.ndarray) -> np.ndarray:
     if len(a.shape) < 2:
         a = a[None, :]
     min_ = a.min(axis=1)[:, None]
-    return np.squeeze((a - min_) / (a.max(axis=1)[:, None] - min_))
+    rescaled = np.squeeze((a - min_) / (a.max(axis=1)[:, None] - min_))
+    # nan can appear in case of a 0 vector
+    return np.nan_to_num(rescaled)
 
 
 Seed = Generator[int, None, None]

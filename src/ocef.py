@@ -1,4 +1,5 @@
 import random
+
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -62,7 +63,7 @@ def remove_non_envy_elements(S, low_bounds, high_bounds, epsilon):
 
 
 def exists_higher_utility(S, low_bounds, high_bounds):
-    
+
     for k in S:
         if low_bounds[k] > high_bounds[0]:
             return True
@@ -75,14 +76,16 @@ def get_conservarive_constraint(
 
     xi = 0
     for s in A:
-        xi += reward_history[s] - Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
+        xi += (
+            reward_history[s] - Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
+        )
 
     return xi
 
 
 def get_phi(N, delta, betas):
     A = np.sum(N[1:])
-    
+
     if A == 0:
         small_phi = 0
     else:
@@ -90,7 +93,7 @@ def get_phi(N, delta, betas):
         small_phi = 1/2 * np.sqrt(2 * A * np.log(6 * A**2/delta)) + 2/3 * np.log(6 * A**2/delta)
     
     sum_K = np.sum(np.multiply(N, betas))
-    
+
     return min(sum_K, small_phi)
 
 
@@ -119,12 +122,14 @@ def ocef(delta, alpha, epsilon, S, utilities):
         l = np.random.choice(S)
 
         betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
-        
+
         Phi = get_phi(N, delta, betas)
 
         # history of rewards???
         # not sure if t here is t-1 or the actual t in their formulas
-        xi = get_conservarive_constraint(t, A, reward_history, Phi, low_bounds[l], high_bounds[0], N[0], alpha)
+        xi = get_conservarive_constraint(
+            t, A, reward_history, Phi, low_bounds[l], high_bounds[0], N[0], alpha
+        )
 
       
         if xi < 0 or betas[0] > min(betas[1:]):
@@ -171,12 +176,13 @@ def ocef(delta, alpha, epsilon, S, utilities):
 
 
 def plot_duration(alphas, duration_per_problem):
-    for problem, duration  in enumerate(duration_per_problem):
+    for problem, duration in enumerate(duration_per_problem):
         plt.plot(alphas, problem, label=problem)
     plt.legend()
     plt.x_label("alpha")
     plt.y_label("duration")
     plt.show()
+
 
 def main():
     S = [i for i in range(1, 10)]
@@ -185,10 +191,10 @@ def main():
 
     # Problem 1
     problems.append([0.6] + [0.3] * 9)
-    
+
     # Problem 2
     problems.append([0.3] + [0.6] + [0.3] * 8)
-    
+
     # Problem 3
     problems.append([0.7 - 0.7 * (k / 10) ** 0.6 for k in range(10)])
 
@@ -196,7 +202,7 @@ def main():
     utilities = [0.7 - 0.7 * (k / 10) ** 0.6 for k in range(10)]
     utilities[0], utilities[1] = utilities[1], utilities[0]
     problems.append(utilities)
-    
+
     durations = []
     costs = []
     
@@ -275,8 +281,7 @@ def main():
     #     with open(f"results/problem4.txt", "a") as f:
     #         f.write(str(tp) + "\n")
 
-
-    #plot_duration(alphas, durations)
+    # plot_duration(alphas, durations)
 
 
 if __name__ == "__main__":

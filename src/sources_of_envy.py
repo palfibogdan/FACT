@@ -72,13 +72,8 @@ def experiment_5_1_1(
     number of factors
     """
 
-    # NOTE should we rescale the raw ground_truths or apply softmax first? the
-    # min and max stay the same, overall scores are different but scaled equally
-    # though. The paper does not mention softmax first, let's see what the
-    # numerical results are
-    ground_truth_probs = utils.softmax(ground_truth, temperature=temperature)
-    # ground_truth_rescaled = utils.minmax_scale(ground_truth_probs)
-    ground_truth_rescaled = ground_truth
+    # ground_truth_probs = utils.softmax(ground_truth, temperature=temperature)
+    ground_truth_rescaled = utils.minmax_scale(ground_truth)
 
     # dictionary to store the metrics by factors, easy to use with pandas
     metrics_dict = {"mean_envy": {}, "prop_eps_envy": {}}
