@@ -15,7 +15,7 @@ from tqdm import tqdm
 def update_bounds(delta, N, rewards):
 
     sigma = 0.5
-    #omega = 1
+    # omega = 1
     omega = 0.99
 
     theta = np.log(1 + omega) * ((omega * delta) / (2 * (2 + omega))) ** (
@@ -39,12 +39,13 @@ def update_bounds(delta, N, rewards):
         #         (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega)) / n
         #     * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n)))
 
-
         mean_mu = r / n
         beta = np.sqrt(
-            (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega)) / n
-        * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n)))
-            
+            (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega))
+            / n
+            * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n))
+        )
+
         betas.append(beta)
 
         low_bounds.append(mean_mu - beta)
@@ -90,8 +91,10 @@ def get_phi(N, delta, betas):
         small_phi = 0
     else:
         # changed this, not much difference
-        small_phi = 1/2 * np.sqrt(2 * A * np.log(6 * A**2/delta)) + 2/3 * np.log(6 * A**2/delta)
-    
+        small_phi = 1 / 2 * np.sqrt(
+            2 * A * np.log(6 * A**2 / delta)
+        ) + 2 / 3 * np.log(6 * A**2 / delta)
+
     sum_K = np.sum(np.multiply(N, betas))
 
     return min(sum_K, small_phi)
@@ -100,9 +103,9 @@ def get_phi(N, delta, betas):
 def ocef(delta, alpha, epsilon, S, utilities):
 
     N = [0] * (len(S) + 1)
-    #N = np.ones(len(S) + 1)
+    # N = np.ones(len(S) + 1)
     rewards = np.zeros(len(S) + 1)
-    #rewards = utilities
+    # rewards = utilities
     reward_history = []
     A = []
 
@@ -131,12 +134,11 @@ def ocef(delta, alpha, epsilon, S, utilities):
             t, A, reward_history, Phi, low_bounds[l], high_bounds[0], N[0], alpha
         )
 
-      
         if xi < 0 or betas[0] > min(betas[1:]):
             k_t = 0
         else:
             k_t = l
-            #Store all t for which baseline was not pulled
+            # Store all t for which baseline was not pulled
             A.append(t)
 
         N[k_t] += 1
@@ -147,9 +149,9 @@ def ocef(delta, alpha, epsilon, S, utilities):
         rewards[k_t] += r
         # optimization problem
         reward_history.append(r)
-       
+
         S = remove_non_envy_elements(S, low_bounds, high_bounds, epsilon)
-        
+
         # betas = [round(beta, 2) for beta in betas]
         # print("betas: ", betas)
         # lows = [round(low, 2) for low in low_bounds]
@@ -157,18 +159,18 @@ def ocef(delta, alpha, epsilon, S, utilities):
         # print("low_bounds: ", lows)
         # print("high_bounds: ", highs)
         # print("\n")
-        #print("N: ", N)
-        #print("xi: ", xi)
-        #print(S)
+        # print("N: ", N)
+        # print("xi: ", xi)
+        # print(S)
         # print("\n")
 
         t += 1
         # if t%1000 == 0:
         #     print(t)
         if exists_higher_utility(S, low_bounds, high_bounds):
-            return True, t, reward_history # envy
+            return True, t, reward_history  # envy
         if not S:
-            return False, t, reward_history # eps_no_envy
+            return False, t, reward_history  # eps_no_envy
 
         # early stopping
         if t >= 50000:
@@ -196,10 +198,10 @@ def main():
 
     durations = []
     costs = []
-    
+
     # _, t, _, = ocef(delta=0.05, alpha=0.1, epsilon=0.05, S=S, utilities=problems[3])
     # print(t)
-    
+
     # starting betas
     # betas:  [4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67]
 
@@ -208,10 +210,9 @@ def main():
 
     # TO Try:
     # 1. Change the starting betas DONE
-    
-    # Some arms are never pulled in problem 2
-    # Arms that were pulled have a higher chance 
 
+    # Some arms are never pulled in problem 2
+    # Arms that were pulled have a higher chance
 
     # for utilities in tqdm(problems):
     #     temp_t = []
@@ -223,7 +224,7 @@ def main():
     #         temp_cost.append(t * utilities[0] - sum(rewards))
     #     durations.append(temp_t)
     #     costs.append(temp_cost)
-    
+
     # print("Problem 1")
     # for alpha in tqdm(alphas):
     #     temp_t = []
@@ -255,7 +256,7 @@ def main():
     #     # save to file
     #     with open(f"results/problem3.txt", "a") as f:
     #         f.write(str(tp) + "\n")
-    
+
     # print("Problem 4")
     # for alpha in tqdm(alphas):
     #     temp_t = []

@@ -4,11 +4,14 @@ from typing import Dict, Sequence, Tuple
 import numpy as np
 
 import config
-import plot
 import recommender
 import utils
 
 logger = logging.getLogger(__name__)
+
+# TO TRY
+# - one-hot ground truth rewards instead of probabilities
+# - movielens with float ratings
 
 
 def compute_utilities(
@@ -131,7 +134,5 @@ def do_envy_from_mispecification(
     movielens_metrics = experiment_5_1_1(
         movielens_recommenders, movielens_ground_truth, epsilon, temperature
     )
-
-    # plot.plot_5_1_1(lastfm_metrics, movielens_metrics, plots_dir)
 
     return {"lastfm": lastfm_metrics, "movielens": movielens_metrics}

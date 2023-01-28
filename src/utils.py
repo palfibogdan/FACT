@@ -1,5 +1,4 @@
 import logging
-from typing import Generator
 
 import numpy as np
 import scipy
@@ -70,14 +69,16 @@ def minmax_scale(a: np.ndarray) -> np.ndarray:
     return np.nan_to_num(rescaled)
 
 
-Seed = Generator[int, None, None]
+class SeedSequence:
+    val: int
 
+    def __init__(self, start: int = 42):
+        self.val = start
 
-def SequenceGenerator(start: int) -> Seed:
-    """
-    A simple infinite sequence of integers. Call next() on it when e.g. an
-    actual seed should be used.
-    """
-    while True:
-        yield start
-        start += 1
+    def __next__(self) -> int:
+        ret = self.val
+        self.val += 1
+        return ret
+
+    def __repr__(self) -> str:
+        return str(self.val)

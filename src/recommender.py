@@ -11,6 +11,7 @@ from scipy import sparse
 
 import constants
 import datasets
+import recommender_models as recsys
 import utils
 
 logger = logging.getLogger(__name__)
@@ -43,11 +44,15 @@ def load_preferences(filename: str) -> np.ndarray:
     return get_preferences(load_recommeder_model(filename))
 
 
+# RECOMMENDERS = {"lastfm": recsys.ALS, "movielens": recsys.LMF}
+
+
 # NOTE each combination of hparams in hparams_flat should be ordered according
 # to hparams_names
 def search_best_model(
     train_mat: sparse.csr_array,
     valid_mat: sparse.csr_array,
+    dataset: str,
     hparams_names: Sequence[str],
     hparams_flat: Sequence[float],
     metric: str,
@@ -55,6 +60,7 @@ def search_best_model(
     best_metrics, best_model, best_hparams = {}, None, None
 
     for hparams in hparams_flat:
+        # model = RECOMMENDERS[dataset]()
         model = implicit.als.AlternatingLeastSquares(
             **dict(zip(hparams_names, hparams))
         )
@@ -85,6 +91,7 @@ def search_ground_truth(
     train_mat: sparse.csr_array,
     valid_mat: sparse.csr_array,
     base_save_path: Path,
+    dataset: str,
     metric: str = "ndcg",
     **_,
 ) -> implicit.als.AlternatingLeastSquares:
@@ -122,6 +129,7 @@ def search_ground_truth(
     best_dict = search_best_model(
         train_mat,
         valid_mat,
+        dataset,
         hyperparams.keys(),
         list(it.product(*hyperparams.values())),
         metric,
@@ -184,7 +192,7 @@ def search_recommender(
 # yields different results; look at how an integer seed is always reinitialized
 # in implicit.evaluation.train_test_split
 def csr_dataset_splits(
-    dataset: np.ndarray, seed_gen: utils.Seed
+    dataset: np.ndarray, seed_gen: utils.SeedSequence
 ) -> Tuple[sparse.csr_array, ...]:
     dataset_csr = sparse.csr_array(dataset)
     logger.info("Splitting the dataset into 70/10/20% train/validation/test splits...")
@@ -199,7 +207,7 @@ def csr_dataset_splits(
 
 def recommender_input_data(
     ground_truth: np.ndarray,
-    seed_gen: utils.Seed,
+    seed_gen: utils.SeedSequence,
     rng: np.random.Generator,
     downsampling_ratio: float = None,
 ) -> Tuple[sparse.csr_array, ...]:
@@ -230,7 +238,7 @@ def recommender_input_data(
 
 
 def generate_ground_truth(
-    dataset_name: str, base_save_path: Path, seed_gen: utils.Seed, **kwargs
+    dataset_name: str, base_save_path: Path, seed_gen: utils.SeedSequence, **kwargs
 ) -> implicit.als.AlternatingLeastSquares:
     logger.info("Loading and preprocessing dataset %s...", dataset_name)
     dataset = datasets.get_dataset(dataset_name, **kwargs)
@@ -240,7 +248,7 @@ def generate_ground_truth(
 
 def generate_recommenders(
     base_save_path: Path,
-    seed_gen: utils.Seed,
+    seed_gen: utils.SeedSequence,
     rng: np.random.Generator,
     dataset_name: str = None,
     ground_truth_model_path: Path = None,
