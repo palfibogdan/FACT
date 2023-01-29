@@ -1,8 +1,8 @@
 import random
-
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
+import os
 
 # TODO:
 # Implement conservative constraint Xi
@@ -15,39 +15,36 @@ from tqdm import tqdm
 def update_bounds(delta, N, rewards):
 
     sigma = 0.5
-    # omega = 1
-    omega = 0.99
+    omega = 0.01
 
     theta = np.log(1 + omega) * ((omega * delta) / (2 * (2 + omega))) ** (
-        1 / (1 + omega)
-    )
+        1 / (1 + omega))
 
     betas = []
     low_bounds = []
     high_bounds = []
 
-    K = len(N)
+    K = len(N) - 1
     for n, r in zip(N, rewards):
-        # if n == 0:
-        #     mean_mu = 0
-        #     beta = np.sqrt(
-        #         (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega))
-        #     * np.log(2 * (K + 1) / theta * np.log((1 + omega)))) + 0.1
-        # else:
-        #     mean_mu = r / n
-        #     beta = np.sqrt(
-        #         (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega)) / n
-        #     * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n)))
 
-        mean_mu = r / n
+        if n == 0:
+            mean_mu = 0
+            n = 1
+        else:
+            mean_mu = r / n
+
+        # OG (2.5x too much duration)
         beta = np.sqrt(
-            (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega))
-            / n
-            * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n))
-        )
+            (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega)) / n
+        * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n)))
+        
+        # first half of formula, too short
+        # beta = np.sqrt(2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega) / n)
 
         betas.append(beta)
 
+        # low_bounds.append(max(mean_mu - beta, 0))
+        # high_bounds.append(min(mean_mu + beta, 1))
         low_bounds.append(mean_mu - beta)
         high_bounds.append(mean_mu + beta)
 
@@ -64,7 +61,7 @@ def remove_non_envy_elements(S, low_bounds, high_bounds, epsilon):
 
 
 def exists_higher_utility(S, low_bounds, high_bounds):
-
+    
     for k in S:
         if low_bounds[k] > high_bounds[0]:
             return True
@@ -77,203 +74,249 @@ def get_conservarive_constraint(
 
     xi = 0
     for s in A:
-        xi += (
-            reward_history[s] - Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
-        )
+        xi += reward_history[s] #- Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
+
+    xi = xi - Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
 
     return xi
 
 
 def get_phi(N, delta, betas):
     A = np.sum(N[1:])
-
+    
     if A == 0:
         small_phi = 0
     else:
-        # changed this, not much difference
-        small_phi = 1 / 2 * np.sqrt(
-            2 * A * np.log(6 * A**2 / delta)
-        ) + 2 / 3 * np.log(6 * A**2 / delta)
-
-    sum_K = np.sum(np.multiply(N, betas))
-
+        small_phi = 1/2 * np.sqrt(2 * A * np.log(6 * A**2/delta)) + 2/3 * np.log(6 * A**2/delta)
+    
+    sum_K = np.sum(np.multiply(N[1:], betas[1:]))
+    
     return min(sum_K, small_phi)
 
 
-def ocef(delta, alpha, epsilon, S, utilities):
-
+def init(delta, means, S):
+    
     N = [0] * (len(S) + 1)
-    # N = np.ones(len(S) + 1)
-    rewards = np.zeros(len(S) + 1)
-    # rewards = utilities
+    rewards = [0] * (len(S) + 1)
     reward_history = []
     A = []
-
-    # sample each arm once
+    # sample each arm twice
     for _ in range(2):
         N[0] += 1
-        rewards[0] += utilities[0]
-        reward_history.append(utilities[0])
+        r = np.random.binomial(1, means[0])
+        rewards[0] += r
+        reward_history.append(r)
+        betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
         for k in S:
             N[k] += 1
-            r = utilities[k]
+            r = np.random.binomial(1, means[k])
             rewards[k] += r
             reward_history.append(r)
 
-    t = len(reward_history)
+            betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
+
+    return N, rewards, reward_history, A, betas, low_bounds, high_bounds
+
+def ocef(delta, alpha, epsilon, S, means):
+
+    # inits = init(delta, means, S)
+
+    # N = inits[0]
+    # rewards = inits[1]
+    # reward_history = inits[2]
+    # A = inits[3]
+    # betas = inits[4]
+    # low_bounds = inits[5]
+    # high_bounds = inits[6]
+    #t = len(reward_history)
+    
+    N = [0] * (len(means))
+    rewards = [0] * (len(means))
+    reward_history = []
+    A = []
+    t = 0
+
     while True:
         l = np.random.choice(S)
-
+        
         betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
 
         Phi = get_phi(N, delta, betas)
 
         # history of rewards???
         # not sure if t here is t-1 or the actual t in their formulas
-        xi = get_conservarive_constraint(
-            t, A, reward_history, Phi, low_bounds[l], high_bounds[0], N[0], alpha
-        )
+        xi = get_conservarive_constraint(t, A, reward_history, Phi, low_bounds[l], high_bounds[0], N[0], alpha)
 
+      
         if xi < 0 or betas[0] > min(betas[1:]):
             k_t = 0
         else:
             k_t = l
-            # Store all t for which baseline was not pulled
+            #Store all t for which baseline was not pulled
             A.append(t)
 
         N[k_t] += 1
-        # Observe context, show action get reward
 
-        r = utilities[k_t]
+        # rewards are given by a bernoulli distribution
+        r = np.random.binomial(1, means[k_t])
+        
         # Store all rewards
         rewards[k_t] += r
+
         # optimization problem
         reward_history.append(r)
 
         S = remove_non_envy_elements(S, low_bounds, high_bounds, epsilon)
-
-        # betas = [round(beta, 2) for beta in betas]
-        # print("betas: ", betas)
-        # lows = [round(low, 2) for low in low_bounds]
-        # highs = [round(high, 2) for high in high_bounds]
-        # print("low_bounds: ", lows)
-        # print("high_bounds: ", highs)
-        # print("\n")
-        # print("N: ", N)
-        # print("xi: ", xi)
-        # print(S)
-        # print("\n")
+        
+        #prints(betas, low_bounds, high_bounds, N, xi, S, rewards, t)
 
         t += 1
-        # if t%1000 == 0:
-        #     print(t)
+        
         if exists_higher_utility(S, low_bounds, high_bounds):
-            return True, t, reward_history  # envy
+            return True, t, reward_history # envy
         if not S:
-            return False, t, reward_history  # eps_no_envy
+            return False, t, reward_history # eps_no_envy
 
         # early stopping
-        if t >= 50000:
+        if t >= 70000:
             return False, t, reward_history
+
+
+def prints(betas, low_bounds, high_bounds, N, xi, S, rewards, t):
+
+    #clear screen
+    #os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # betas = [round(beta, 2) for beta in betas]
+    # print("betas: ", betas)
+    # lows = [round(low, 2) for low in low_bounds]
+    # highs = [round(high, 2) for high in high_bounds]
+    # print("low_bounds: ", lows)
+    # print("high_bounds: ", highs)
+    #print("\n")
+    # print("N: ", N)
+    # print("xi: ", xi)
+    # print(S)
+    # print("\n")
+    # print(rewards)
+    if t%1000 == 0:
+            print(t)
+    
+
+def plot(alphas):
+
+    # save as npy next time...
+
+    all_durations = []
+    all_costs = []
+
+    for i in range(1, 5):
+        # read from file
+        with open(f"src/results_ocef/problem{i}.txt", "r") as f:
+            data = f.read()
+        
+        data = data.split("\n")
+        #remove brackets
+        data = [d[1:-1] for d in data]
+        #remove empty strings
+        data = [d for d in data if d]
+        #split into tuples
+        data = [d.split(", ") for d in data]
+        #convert to floats
+        data = [(float(d[0]), float(d[1])) for d in data]
+        
+        durations = [d[0] for d in data]
+        costs = [d[1] for d in data]
+        all_durations.append(durations)
+        all_costs.append(costs)
+
+    
+    # plot durations and costs side by side\
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    colors = ["red", "green", "blue", "cyan"]
+    styles = ["-", "--", "-.", ":"]
+    for durations, costs in zip(all_durations, all_costs):
+        c = colors.pop(0)
+        style = styles.pop(0)
+        durations = np.array(durations)
+        ax1.plot(alphas, durations, color=c, linestyle=style)
+        ax2.plot(alphas, costs, color = c, linestyle=style)
+    
+    ax1.set_xlabel("alpha")
+    ax2.set_xlabel("alpha")
+    ax1.set_ylabel("duration")
+    ax2.set_ylabel("average cost of exploration")
+    
+    ax1.legend(["1", "2", "3", "4"])
+    ax2.legend(["1", "2", "3", "4"])
+
+    # change figure size
+    fig.set_size_inches(10, 5)
+    # make plots square
+    fig.tight_layout()
+    # set y axis to 10^4 for durations
+    ax1.set_yscale("log")
+    # ax1.set_yticks([0.1, 0.5, 1.0, 5.0])
+    # ax1.set_yticklabels([0.1, 0.5, 1.0, 5.0])
+   
+    plt.show()
+
+
+def run_experiment(S, alphas, problems, num_runs=100):
+    
+    for problem, means in enumerate(problems):
+        print("Problem ", problem)
+        for alpha in tqdm(alphas):
+            temp_t = []
+            temp_cost = []
+            for _ in range(100):
+                _, t, rewards = ocef(delta=0.05, alpha=alpha, epsilon=0.05, S=S, means=means)
+                temp_t.append(t)
+                temp_cost.append(t * means[0] - sum(rewards))
+            print("Timed out:", len([t for t in temp_t if t >= 70000]))
+            mean_t = sum(temp_t) / len(temp_t)
+            mean_cost = sum(temp_cost) / len(temp_cost)
+            tp = (mean_t, mean_cost)
+            # save to file
+            # save as npy next time
+            with open(f"src/results_ocef/problem{problem}.txt", "a") as f:
+                f.write(str(tp) + "\n")
 
 
 def main():
     S = [i for i in range(1, 10)]
-    alphas = [i / 10 for i in range(1, 6)]
+    #alphas = [i / 10 for i in range(1, 6)]
+    alphas = np.linspace(0.01, 0.5, 12)
     problems = []
-
+    
     # Problem 1
     problems.append([0.6] + [0.3] * 9)
-
+    
     # Problem 2
     problems.append([0.3] + [0.6] + [0.3] * 8)
-
+    
     # Problem 3
     problems.append([0.7 - 0.7 * (k / 10) ** 0.6 for k in range(10)])
 
     # Problem 4
-    utilities = [0.7 - 0.7 * (k / 10) ** 0.6 for k in range(10)]
-    utilities[0], utilities[1] = utilities[1], utilities[0]
-    problems.append(utilities)
+    means = [0.7 - 0.7 * (k / 10) ** 0.6 for k in range(10)]
+    means[0], means[1] = means[1], means[0]
+    problems.append(means)
+    
+    # temp_t = []
+    # temp_cost = []
+    # for _ in tqdm(range(100)):
+    #     _, t, rewards, = ocef(delta=0.05, alpha=0.01, epsilon=0.05, S=S, means=problems[1])
+    #     temp_t.append(t)
+    #     temp_cost.append(t * problems[1][0] - sum(rewards))
+    
+    # print("Avg duration:", sum(temp_t) / len(temp_t))
+    # print("Avg cost:", sum(temp_cost) / len(temp_cost))
+    # print("Timed out:", len([t for t in temp_t if t >= 70000]))
+    
+    # run_experiment(S, alphas, problems, num_runs=100)
 
-    durations = []
-    costs = []
-
-    # _, t, _, = ocef(delta=0.05, alpha=0.1, epsilon=0.05, S=S, utilities=problems[3])
-    # print(t)
-
-    # starting betas
-    # betas:  [4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67, 4.67]
-
-    # good betas:
-    # betas:  [0.07, 0.27, 0.26, 0.28, 0.26, 0.28, 0.27, 0.26, 0.26, 0.25]
-
-    # TO Try:
-    # 1. Change the starting betas DONE
-
-    # Some arms are never pulled in problem 2
-    # Arms that were pulled have a higher chance
-
-    # for utilities in tqdm(problems):
-    #     temp_t = []
-    #     temp_cost = []
-    #     for alpha in tqdm(alphas):
-    #         _, t, rewards = ocef(delta=0.05, alpha=alpha, epsilon=0.05, S=S, utilities=utilities)
-    #         temp_t.append(t)
-    #         # print(sum(rewards))
-    #         temp_cost.append(t * utilities[0] - sum(rewards))
-    #     durations.append(temp_t)
-    #     costs.append(temp_cost)
-
-    # print("Problem 1")
-    # for alpha in tqdm(alphas):
-    #     temp_t = []
-    #     temp_cost = []
-    #     for _ in range(100):
-    #         _, t, rewards = ocef(delta=0.05, alpha=alpha, epsilon=0.05, S=S, utilities=problems[0])
-    #         temp_t.append(t)
-    #         temp_cost.append(t * problems[0][0] - sum(rewards))
-
-    #     mean_t = sum(temp_t) / len(temp_t)
-    #     mean_cost = sum(temp_cost) / len(temp_cost)
-    #     tp = (mean_t, mean_cost)
-    #     # save to file
-    #     with open(f"results/problem1.txt", "a") as f:
-    #         f.write(str(tp) + "\n")
-
-    # print("Problem 3")
-    # for alpha in tqdm(alphas):
-    #     temp_t = []
-    #     temp_cost = []
-    #     for _ in range(100):
-    #         _, t, rewards = ocef(delta=0.05, alpha=alpha, epsilon=0.05, S=S, utilities=problems[2])
-    #         temp_t.append(t)
-    #         temp_cost.append(t * problems[2][0] - sum(rewards))
-
-    #     mean_t = sum(temp_t) / len(temp_t)
-    #     mean_cost = sum(temp_cost) / len(temp_cost)
-    #     tp = (mean_t, mean_cost)
-    #     # save to file
-    #     with open(f"results/problem3.txt", "a") as f:
-    #         f.write(str(tp) + "\n")
-
-    # print("Problem 4")
-    # for alpha in tqdm(alphas):
-    #     temp_t = []
-    #     temp_cost = []
-    #     for _ in range(100):
-    #         _, t, rewards = ocef(delta=0.05, alpha=alpha, epsilon=0.05, S=S, utilities=problems[3])
-    #         temp_t.append(t)
-    #         temp_cost.append(t * problems[3][0] - sum(rewards))
-
-    #     mean_t = sum(temp_t) / len(temp_t)
-    #     mean_cost = sum(temp_cost) / len(temp_cost)
-    #     tp = (mean_t, mean_cost)
-    #     # save to file
-    #     with open(f"results/problem4.txt", "a") as f:
-    #         f.write(str(tp) + "\n")
-
-    # plot_duration(alphas, durations)
+    plot(alphas)
 
 
 if __name__ == "__main__":
