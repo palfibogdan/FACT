@@ -36,7 +36,7 @@ class Recommender:
     def __init__(self):
         self.logger = logging.getLogger(f"{__name__}:{type(self).__name__}")
 
-    def train(self, train_mat: Union[np.ndarray, pd.DataFrame, sparse.csr_array]):
+    def train(self, train_mat: Union[pd.DataFrame, sparse.csr_array]):
         if isinstance(train_mat, np.ndarray):
             train_mat = sparse.csr_array(train_mat)
         self.model.fit(train_mat, show_progress=False)
@@ -44,7 +44,8 @@ class Recommender:
 
     def set_preferences(self):
         user_factors, item_factors = self.model.user_factors, self.model.item_factors
-        if implicit.gpu.HAS_CUDA:
+        if isinstance(user_factors, implicit.gpu._cuda.Matrix):
+            # model was trained on the GPU
             user_factors, item_factors = (
                 user_factors.to_numpy(),
                 item_factors.to_numpy(),
@@ -79,7 +80,10 @@ class ALS(Recommender):
             args["regularization"] = regularization
         if alpha is not None:
             args["alpha"] = alpha
-        self.model = AlternatingLeastSquares(**args)
+        try:
+            self.model = AlternatingLeastSquares(**args, use_gpu=implicit.gpu.HAS_CUDA)
+        except NotImplementedError:
+            self.model = AlternatingLeastSquares(**args)
 
     @classmethod
     def load(cls, filename: Path) -> AlternatingLeastSquares:
@@ -99,7 +103,13 @@ class LMF(Recommender):
             args["learning_rate"] = learning_rate
         if regularization is not None:
             args["regularization"] = regularization
-        self.model = LogisticMatrixFactorization(**args)
+        try:
+
+            self.model = LogisticMatrixFactorization(
+                **args, use_gpu=implicit.gpu.HAS_CUDA
+            )
+        except NotImplementedError:
+            self.model = LogisticMatrixFactorization(**args)
 
     @classmethod
     def load(cls, filename: Path) -> LogisticMatrixFactorization:
