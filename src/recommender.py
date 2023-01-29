@@ -1,5 +1,6 @@
 import itertools as it
 import logging
+import multiprocessing as mp
 import pprint
 from pathlib import Path
 from typing import Dict, Sequence, Union
@@ -35,50 +36,51 @@ def save_hyperparams_and_metrics(
     logger.debug("Saved best model hyperparams and metrics to %s", filename)
 
 
-# NOTE each combination of hparams in hparams_flat should be ordered according
-# to hparams_names
 def search_best_model(
-    # train_mat: sparse.csr_array,
-    # valid_mat: sparse.csr_array,
     train_mat: Union[sparse.csr_array, pd.DataFrame],
     valid_mat: np.ma.masked_array,
     hparams_names: Sequence[str],
     hparams_flat: Sequence[float],
     model_class: recsys.AnyRecommender,
-    # metric: str,
-) -> Dict[str, dict]:
-    # best_metrics, best_model, best_hparams = {}, None, None
-    best_score = -1.0
+    parallel=False,
+):
+    # NOTE declared closure globally then delete it for parallelism
+    # (https://stackoverflow.com/a/67050659)
+    global search
 
-    for hparams in hparams_flat:
-        model = model_class(**dict(zip(hparams_names, hparams)))
-        model.train(train_mat)
+    def search(hp, rest):
+        global logger  # unnecessary but visible
+        model_class, hparams_names, train = rest
+        hp = dict(zip(hparams_names, hp))
+        model = model_class(**hp)
+        logger_ = getattr(model, "logger", logger)
+        logger_.info("Grid search hparams: %s", hp)
+        model.train(train)
         # metrics = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)
         # score, best_score = metrics[metric], best_metrics.get(metric, -1.0)
-        score = model.validate(valid_mat)
-        if score > best_score:
-            logger_ = getattr(model, "logger", logger)
-            logger_.info(
-                # "Best model found! Old %s: %f new %s: %f hparams: %s",
-                # metric,
-                # best_score,
-                # metric,
-                # score,
-                # hparams,
-                "Best model found! Old DCG@40: %f new: %f hparams: %s",
-                best_score,
-                score,
-                hparams,
-            )
-            # best_metrics = metrics
-            best_score = score
-            best_model = model
-            best_hparams = hparams
+        return model.validate(valid_mat), hp, model
 
+    args = list(
+        zip(
+            hparams_flat,
+            [[model_class, list(hparams_names), train_mat]] * len(hparams_flat),
+        )
+    )
+
+    if parallel:
+        n_procs = min(len(hparams_flat), mp.cpu_count())
+        logger.info("Spawning %d processes for grid search", n_procs)
+        with mp.Pool(processes=n_procs) as pool:
+            res = pool.starmap(search, args)
+    else:
+        res = [search(*arg) for arg in args]
+
+    del search
+
+    best_score, best_hparams, best_model = max(res, key=lambda el: el[0])
     return {
         "model": best_model,
-        "hparams": dict(zip(hparams_names, best_hparams)),
-        # "metrics": best_metrics,
+        "hparams": best_hparams,
         "metrics": {"DCG@40": best_score},
     }
 
@@ -140,7 +142,12 @@ def search_recommender(
         # this not implemented rn
         hparams = list((factor,) + hp for hp in hyperparams_inner_flat)
         best_dict = search_best_model(
-            train_mat, valid_mat, hyperparams.keys(), hparams, recsys.FSVD
+            train_mat,
+            valid_mat,
+            hyperparams.keys(),
+            hparams,
+            recsys.FSVD,
+            parallel=True,
         )
 
         model_save_path = f"{base_save_path}_factors_{factor}.npz"
@@ -188,6 +195,7 @@ def generate_recommenders(
     train, valid, _ = utils.train_test_split_mask(
         ground_truth_model.preferences, 0.7, rng, valid_prop=0.1
     )
+    # shape the dataframe in the format wanted by funk_svd.SVD
     train_df = (
         pd.DataFrame(train.filled())
         .melt(var_name="i_id", value_name="rating", ignore_index=False)

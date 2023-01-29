@@ -14,16 +14,16 @@ ground_truth_lastfm_hparams = {
 }
 
 
-# appendix C.2
-# recommender_hparams = {
-#     "factors": [2**i for i in range(9)],
-#     "regularization": [10 ** (i - 3) for i in range(4)],
-#     "alpha": [10 ** (i - 1) for i in range(4)],
-# }
+# # appendix C.2
+# # recommender_hparams = {
+# #     "factors": [2**i for i in range(9)],
+# #     "regularization": [10 ** (i - 3) for i in range(4)],
+# #     "alpha": [10 ** (i - 1) for i in range(4)],
+# # }
 recommender_hparams = {
     "factors": ground_truth_hparams["factors"],
     "regularization": ground_truth_hparams["regularization"],
-    "lr": [0.005, 0.1],
+    "lr": [0.005, 0.01, 0.1],
 }
 
 

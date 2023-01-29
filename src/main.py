@@ -86,19 +86,18 @@ def main(args: argparse.Namespace):
     # return EXPERIMENTS_FNS[args.experiment](**kvargs)
     import recommender
 
-    recommender.generate_recommenders(
-        args.lastfm_model_dir / args.recommenders_file_name,
-        # seed_seq,
-        rng,
-        dataset_name="lastfm",
-        # ground_truth_model_path=args.lastfm_model_dir
-        # / (args.recommenders_file_name + ".npz"),
-        **kvargs,
-    )
+    # recommender.generate_recommenders(
+    #     args.lastfm_model_dir / args.recommenders_file_name,
+    #     rng,
+    #     dataset_name="lastfm",
+    #     ground_truth_model_path=args.lastfm_model_dir / "model.npz",
+    #     **kvargs,
+    # )
     recommender.generate_recommenders(
         args.movielens_model_dir / args.recommenders_file_name,
         rng,
         dataset_name="movielens",
+        ground_truth_model_path=config.MOVIELENS_RECOMMENDER_DIR / "model.npz",
         **kvargs,
     )
 

@@ -11,13 +11,13 @@ from implicit.lmf import LogisticMatrixFactorization
 from scipy import sparse
 from sklearn import metrics
 
-Recommenders = Union[AlternatingLeastSquares, LogisticMatrixFactorization]
-AnyRecommender = Union[SVD, Recommenders]
-
-
 # ALS -> ground truth MovieLens
 # LMF -> ground truth LastFm
 # SVD -> recommmenders both
+
+
+Recommenders = Union[AlternatingLeastSquares, LogisticMatrixFactorization]
+AnyRecommender = Union[SVD, Recommenders]
 
 
 def check_extension(p: Path, ext: str = ".npz") -> Path:
@@ -28,10 +28,12 @@ def check_extension(p: Path, ext: str = ".npz") -> Path:
     return p
 
 
+# NOTE majority of functionality for Implicit models is here to avoid repetition
 class Recommender:
     model: AnyRecommender = None
     logger: logging.Logger = None
     preferences: np.ndarray = None
+    _model_class: type = None
 
     def __init__(self):
         self.logger = logging.getLogger(f"{__name__}:{type(self).__name__}")
@@ -66,14 +68,17 @@ class Recommender:
 
     @classmethod
     def load(cls, filename: Path) -> AnyRecommender:
-        ...
+        ret = cls(32)
+        ret.model = cls._model_class.load(filename)
+        ret.set_preferences()
+        return ret
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}:{self.model.__class__}"
 
 
 class ALS(Recommender):
-    model: implicit.cpu.als.AlternatingLeastSquares = None
+    _model_class = implicit.cpu.als.AlternatingLeastSquares
 
     def __init__(self, factors: int, regularization: float = None, alpha: float = None):
         super().__init__()
@@ -88,15 +93,10 @@ class ALS(Recommender):
         except NotImplementedError:
             self.model = AlternatingLeastSquares(**args)
 
-    @classmethod
-    def load(cls, filename: Path) -> AlternatingLeastSquares:
-        ret = cls(32)
-        ret.model = implicit.cpu.als.AlternatingLeastSquares.load(filename)
-        ret.set_preferences()
-        return ret
-
 
 class LMF(Recommender):
+    _model_class = implicit.cpu.lmf.LogisticMatrixFactorization
+
     def __init__(
         self, factors: int, learning_rate: float = None, regularization: float = None
     ):
@@ -114,15 +114,10 @@ class LMF(Recommender):
         except NotImplementedError:
             self.model = LogisticMatrixFactorization(**args)
 
-    @classmethod
-    def load(cls, filename: Path) -> LogisticMatrixFactorization:
-        ret = cls(32)
-        ret.model = implicit.cpu.lmf.LogisticMatrixFactorization.load(filename)
-        ret.set_preferences()
-        return ret
-
 
 class FSVD(Recommender):
+    _model_class = SVD
+
     def __init__(self, factors: int, lr: float = None, regularization: float = None):
         super().__init__()
         args = {"n_factors": factors, "n_epochs": 30}
