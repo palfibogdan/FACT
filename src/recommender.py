@@ -57,7 +57,8 @@ def search_best_model(
         # score, best_score = metrics[metric], best_metrics.get(metric, -1.0)
         score = model.validate(valid_mat)
         if score > best_score:
-            logger.info(
+            logger_ = getattr(model, "logger", logger)
+            logger_.info(
                 # "Best model found! Old %s: %f new %s: %f hparams: %s",
                 # metric,
                 # best_score,
@@ -94,12 +95,15 @@ def search_ground_truth(
     logger.info("Hyperparameters in grid search for dataset %s:", dataset)
     logger.info(pprint.pformat(hyperparams))
 
+    ground_truth_model_class = recsys.GROUND_TRUTH_MODELS[dataset]
+    logger.info("Ground truth for %s, model: %s", dataset, ground_truth_model_class)
+
     best_dict = search_best_model(
         train_mat,
         valid_mat,
         hyperparams.keys(),
         list(it.product(*hyperparams.values())),
-        recsys.GROUND_TRUTH_MODELS[dataset],
+        ground_truth_model_class,
     )
 
     model_save_path = f"{base_save_path}.npz"
@@ -122,7 +126,7 @@ def search_recommender(
     **_,
 ):
     hyperparams = constants.recommender_hparams
-    logger.info("Hyperparameters in recommender grid search:")
+    logger.info("%s, Hyperparameters in recommender grid search:", recsys.FSVD)
     logger.info(pprint.pformat(hyperparams))
 
     hyperparams_inner = hyperparams.copy()

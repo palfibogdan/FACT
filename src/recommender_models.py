@@ -68,6 +68,9 @@ class Recommender:
     def load(cls, filename: Path) -> AnyRecommender:
         ...
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}:{self.model.__class__}"
+
 
 class ALS(Recommender):
     model: implicit.cpu.als.AlternatingLeastSquares = None
