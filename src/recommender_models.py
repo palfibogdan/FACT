@@ -9,10 +9,15 @@ from funk_svd import SVD
 from implicit.als import AlternatingLeastSquares
 from implicit.lmf import LogisticMatrixFactorization
 from scipy import sparse
+from sklearn import metrics
 
-# TODO validate
+Recommenders = Union[AlternatingLeastSquares, LogisticMatrixFactorization]
+AnyRecommender = Union[SVD, Recommenders]
 
-AnyRecommender = Union[AlternatingLeastSquares, LogisticMatrixFactorization, SVD]
+
+# ALS -> ground truth MovieLens
+# LMF -> ground truth LastFm
+# SVD -> recommmenders both
 
 
 def check_extension(p: Path, ext: str = ".npz") -> Path:
@@ -34,15 +39,24 @@ class Recommender:
     def train(self, train_mat: Union[np.ndarray, pd.DataFrame, sparse.csr_array]):
         if isinstance(train_mat, np.ndarray):
             train_mat = sparse.csr_array(train_mat)
-        self.model.fit(train_mat)
-        # save preferences
+        self.model.fit(train_mat, show_progress=False)
+        self.set_preferences()
+
+    def set_preferences(self):
         user_factors, item_factors = self.model.user_factors, self.model.item_factors
         if implicit.gpu.HAS_CUDA:
             user_factors, item_factors = (
                 user_factors.to_numpy(),
                 item_factors.to_numpy(),
             )
-        self._preferences = user_factors @ item_factors.T
+        self.preferences = user_factors @ item_factors.T
+
+    def validate(self, labels_masked: np.ma.masked_array, k=40, fill=True) -> float:
+        estimates_masked = np.ma.masked_array(self.preferences, labels_masked.mask)
+        if fill:
+            estimates_masked = estimates_masked.filled(labels_masked.fill_value)
+            labels_masked = labels_masked.filled()
+        return metrics.dcg_score(labels_masked, estimates_masked, k=k)
 
     def save(self, savepath: Path):
         savepath = check_extension(savepath)
@@ -59,7 +73,7 @@ class ALS(Recommender):
 
     def __init__(self, factors: int, regularization: float = None, alpha: float = None):
         super().__init__()
-        args = {"factors": factors}
+        args = {"factors": factors, "iterations": 30}
         # use defaults from implicit if regularization and alpha are not passed
         if regularization is not None:
             args["regularization"] = regularization
@@ -71,6 +85,7 @@ class ALS(Recommender):
     def load(cls, filename: Path) -> AlternatingLeastSquares:
         ret = cls(32)
         ret.model = implicit.cpu.als.AlternatingLeastSquares.load(filename)
+        ret.set_preferences()
         return ret
 
 
@@ -79,7 +94,7 @@ class LMF(Recommender):
         self, factors: int, learning_rate: float = None, regularization: float = None
     ):
         super().__init__()
-        args = {"factors": factors}
+        args = {"factors": factors, "iterations": 30}
         if learning_rate is not None:
             args["learning_rate"] = learning_rate
         if regularization is not None:
@@ -90,33 +105,31 @@ class LMF(Recommender):
     def load(cls, filename: Path) -> LogisticMatrixFactorization:
         ret = cls(32)
         ret.model = implicit.cpu.lmf.LogisticMatrixFactorization.load(filename)
+        ret.set_preferences()
         return ret
 
 
 class FSVD(Recommender):
-    def __init__(
-        self,
-        factors: int,
-        lr: float = None,
-        regularization: float = None,
-        num_epochs: int = None,
-    ):
+    def __init__(self, factors: int, lr: float = None, regularization: float = None):
         super().__init__()
-        args = {"n_factors": factors}
-        for k, v in zip(["lr", "reg", "n_epochs"], [lr, regularization, num_epochs]):
+        args = {"n_factors": factors, "n_epochs": 30}
+        for k, v in zip(["lr", "reg"], [lr, regularization]):
             if v is not None:
                 args[k] = v
         self.model = SVD(**args)
 
-    def train(self, train_df: pd.DataFrame):
-        # NOTE assumes train_df is in long format and contains columns u_id,
-        # i_id and rating
-        self.model.fit(train_df)
+    def set_preferences(self):
         self.preferences = (
             (self.model.pu_ @ self.model.qi_.T)
             + self.model.bu_[:, None]
             + self.model.bi_[None, :]
         )
+
+    def train(self, train_df: pd.DataFrame):
+        # NOTE assumes train_df is in long format and contains columns u_id,
+        # i_id and rating
+        self.model.fit(train_df)
+        self.set_preferences()
 
     def save(self, savepath: Path):
         savepath = check_extension(savepath)
@@ -132,4 +145,8 @@ class FSVD(Recommender):
         with np.load(filename, allow_pickle=True) as data:
             for k, v in data.items():
                 setattr(ret.model, k, v)
+        ret.set_preferences()
         return ret
+
+
+GROUND_TRUTH_MODELS = {"movielens": ALS, "lastfm": LMF}

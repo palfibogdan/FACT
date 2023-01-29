@@ -81,21 +81,22 @@ def parse_option() -> argparse.ArgumentParser:
 def main(args: argparse.Namespace):
     kvargs = vars(args)
     pprint(kvargs)
-    seed_seq = utils.SequenceGenerator(args.seed)
+    # seed_seq = utils.SequenceGenerator(args.seed)
     rng = np.random.default_rng(args.seed)
     # return EXPERIMENTS_FNS[args.experiment](**kvargs)
     import recommender
 
     recommender.generate_recommenders(
-        args.lastfm_models_dir / args.recommenders_file_name,
-        seed_seq,
+        args.lastfm_model_dir / args.recommenders_file_name,
+        # seed_seq,
         rng,
         dataset_name="lastfm",
+        # ground_truth_model_path=args.lastfm_model_dir
+        # / (args.recommenders_file_name + ".npz"),
         **kvargs,
     )
     recommender.generate_recommenders(
-        args.movielens_models_dir / args.recommenders_file_name,
-        seed_seq,
+        args.movielens_model_dir / args.recommenders_file_name,
         rng,
         dataset_name="movielens",
         **kvargs,
