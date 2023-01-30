@@ -9,10 +9,15 @@ from funk_svd import SVD
 from implicit.als import AlternatingLeastSquares
 from implicit.lmf import LogisticMatrixFactorization
 from scipy import sparse
+from sklearn import metrics
 
-# TODO validate
+# ALS -> ground truth MovieLens
+# LMF -> ground truth LastFm
+# SVD -> recommmenders both
 
-AnyRecommender = Union[AlternatingLeastSquares, LogisticMatrixFactorization, SVD]
+
+Recommenders = Union[AlternatingLeastSquares, LogisticMatrixFactorization]
+AnyRecommender = Union[SVD, Recommenders]
 
 
 def check_extension(p: Path, ext: str = ".npz") -> Path:
@@ -23,26 +28,38 @@ def check_extension(p: Path, ext: str = ".npz") -> Path:
     return p
 
 
+# NOTE majority of functionality for Implicit models is here to avoid repetition
 class Recommender:
     model: AnyRecommender = None
     logger: logging.Logger = None
     preferences: np.ndarray = None
+    _model_class: type = None
 
     def __init__(self):
         self.logger = logging.getLogger(f"{__name__}:{type(self).__name__}")
 
-    def train(self, train_mat: Union[np.ndarray, pd.DataFrame, sparse.csr_array]):
+    def train(self, train_mat: Union[pd.DataFrame, sparse.csr_array]):
         if isinstance(train_mat, np.ndarray):
             train_mat = sparse.csr_array(train_mat)
-        self.model.fit(train_mat)
-        # save preferences
+        self.model.fit(train_mat, show_progress=False)
+        self.set_preferences()
+
+    def set_preferences(self):
         user_factors, item_factors = self.model.user_factors, self.model.item_factors
-        if implicit.gpu.HAS_CUDA:
+        if isinstance(user_factors, implicit.gpu._cuda.Matrix):
+            # model was trained on the GPU
             user_factors, item_factors = (
                 user_factors.to_numpy(),
                 item_factors.to_numpy(),
             )
-        self._preferences = user_factors @ item_factors.T
+        self.preferences = user_factors @ item_factors.T
+
+    def validate(self, labels_masked: np.ma.masked_array, k=40, fill=True) -> float:
+        estimates_masked = np.ma.masked_array(self.preferences, labels_masked.mask)
+        if fill:
+            estimates_masked = estimates_masked.filled(labels_masked.fill_value)
+            labels_masked = labels_masked.filled()
+        return metrics.dcg_score(labels_masked, estimates_masked, k=k)
 
     def save(self, savepath: Path):
         savepath = check_extension(savepath)
@@ -51,72 +68,76 @@ class Recommender:
 
     @classmethod
     def load(cls, filename: Path) -> AnyRecommender:
-        ...
+        ret = cls(32)
+        ret.model = cls._model_class.load(filename)
+        ret.set_preferences()
+        return ret
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}:{self.model.__class__}"
 
 
 class ALS(Recommender):
-    model: implicit.cpu.als.AlternatingLeastSquares = None
+    _model_class = implicit.cpu.als.AlternatingLeastSquares
 
     def __init__(self, factors: int, regularization: float = None, alpha: float = None):
         super().__init__()
-        args = {"factors": factors}
+        args = {"factors": factors, "iterations": 30}
         # use defaults from implicit if regularization and alpha are not passed
         if regularization is not None:
             args["regularization"] = regularization
         if alpha is not None:
             args["alpha"] = alpha
-        self.model = AlternatingLeastSquares(**args)
-
-    @classmethod
-    def load(cls, filename: Path) -> AlternatingLeastSquares:
-        ret = cls(32)
-        ret.model = implicit.cpu.als.AlternatingLeastSquares.load(filename)
-        return ret
+        try:
+            self.model = AlternatingLeastSquares(**args, use_gpu=implicit.gpu.HAS_CUDA)
+        except NotImplementedError:
+            self.model = AlternatingLeastSquares(**args)
 
 
 class LMF(Recommender):
+    _model_class = implicit.cpu.lmf.LogisticMatrixFactorization
+
     def __init__(
         self, factors: int, learning_rate: float = None, regularization: float = None
     ):
         super().__init__()
-        args = {"factors": factors}
+        args = {"factors": factors, "iterations": 30}
         if learning_rate is not None:
             args["learning_rate"] = learning_rate
         if regularization is not None:
             args["regularization"] = regularization
-        self.model = LogisticMatrixFactorization(**args)
+        try:
 
-    @classmethod
-    def load(cls, filename: Path) -> LogisticMatrixFactorization:
-        ret = cls(32)
-        ret.model = implicit.cpu.lmf.LogisticMatrixFactorization.load(filename)
-        return ret
+            self.model = LogisticMatrixFactorization(
+                **args, use_gpu=implicit.gpu.HAS_CUDA
+            )
+        except NotImplementedError:
+            self.model = LogisticMatrixFactorization(**args)
 
 
 class FSVD(Recommender):
-    def __init__(
-        self,
-        factors: int,
-        lr: float = None,
-        regularization: float = None,
-        num_epochs: int = None,
-    ):
+    _model_class = SVD
+
+    def __init__(self, factors: int, lr: float = None, regularization: float = None):
         super().__init__()
-        args = {"n_factors": factors}
-        for k, v in zip(["lr", "reg", "n_epochs"], [lr, regularization, num_epochs]):
+        args = {"n_factors": factors, "n_epochs": 30}
+        for k, v in zip(["lr", "reg"], [lr, regularization]):
             if v is not None:
                 args[k] = v
         self.model = SVD(**args)
 
-    def train(self, train_df: pd.DataFrame):
-        # NOTE assumes train_df is in long format and contains columns u_id,
-        # i_id and rating
-        self.model.fit(train_df)
+    def set_preferences(self):
         self.preferences = (
             (self.model.pu_ @ self.model.qi_.T)
             + self.model.bu_[:, None]
             + self.model.bi_[None, :]
         )
+
+    def train(self, train_df: pd.DataFrame):
+        # NOTE assumes train_df is in long format and contains columns u_id,
+        # i_id and rating
+        self.model.fit(train_df)
+        self.set_preferences()
 
     def save(self, savepath: Path):
         savepath = check_extension(savepath)
@@ -132,4 +153,8 @@ class FSVD(Recommender):
         with np.load(filename, allow_pickle=True) as data:
             for k, v in data.items():
                 setattr(ret.model, k, v)
+        ret.set_preferences()
         return ret
+
+
+GROUND_TRUTH_MODELS = {"movielens": ALS, "lastfm": LMF}

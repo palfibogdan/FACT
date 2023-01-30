@@ -1,12 +1,12 @@
 import itertools as it
 import logging
+import multiprocessing as mp
 import pprint
 from pathlib import Path
-from typing import Dict, Sequence, Tuple
+from typing import Dict, Sequence, Union
 
-import implicit
 import numpy as np
-from implicit import evaluation
+import pandas as pd
 from scipy import sparse
 
 import constants
@@ -14,11 +14,18 @@ import datasets
 import recommender_models as recsys
 import utils
 
+# from implicit import evaluation
+
+# TODO global configuration object to pass around functions & access only the
+# needed attributes instead of opaque **kwargs...
+# TODO possibility to use other evaluation metrics, e.g. from
+# implicit.evaluation? don't work out of the box with funk_svd.SVD though
+
 logger = logging.getLogger(__name__)
 
 
 def save_hyperparams_and_metrics(
-    filename: Path, hparams: dict, metrics: dict, metric_used: str
+    filename: Path, hparams: dict, metrics: dict, metric_used: str = "DCG@40"
 ):
     header = f"{','.join(list(hparams) + list(metrics))},used"
     content = list(hparams.values()) + list(metrics.values()) + [metric_used]
@@ -29,110 +36,76 @@ def save_hyperparams_and_metrics(
     logger.debug("Saved best model hyperparams and metrics to %s", filename)
 
 
-def load_recommeder_model(filename: str) -> implicit.als.AlternatingLeastSquares:
-    return implicit.cpu.als.AlternatingLeastSquares.load(filename)
-
-
-def get_preferences(model: implicit.als.AlternatingLeastSquares) -> np.ndarray:
-    user_factors, item_factors = model.user_factors, model.item_factors
-    if implicit.gpu.HAS_CUDA:
-        user_factors, item_factors = user_factors.to_numpy(), item_factors.to_numpy()
-    return user_factors @ item_factors.T
-
-
-def load_preferences(filename: str) -> np.ndarray:
-    return get_preferences(load_recommeder_model(filename))
-
-
-# RECOMMENDERS = {"lastfm": recsys.ALS, "movielens": recsys.LMF}
-
-
-# NOTE each combination of hparams in hparams_flat should be ordered according
-# to hparams_names
 def search_best_model(
-    train_mat: sparse.csr_array,
-    valid_mat: sparse.csr_array,
-    dataset: str,
+    train_mat: Union[sparse.csr_array, pd.DataFrame],
+    valid_mat: np.ma.masked_array,
     hparams_names: Sequence[str],
     hparams_flat: Sequence[float],
-    metric: str,
-) -> Dict[str, dict]:
-    best_metrics, best_model, best_hparams = {}, None, None
+    model_class: recsys.AnyRecommender,
+    parallel=False,
+):
+    # NOTE declared closure globally then delete it for parallelism
+    # (https://stackoverflow.com/a/67050659)
+    global search
 
-    for hparams in hparams_flat:
-        # model = RECOMMENDERS[dataset]()
-        model = implicit.als.AlternatingLeastSquares(
-            **dict(zip(hparams_names, hparams))
+    def search(hp, rest):
+        global logger  # unnecessary but visible
+        model_class, hparams_names, train = rest
+        hp = dict(zip(hparams_names, hp))
+        model = model_class(**hp)
+        logger_ = getattr(model, "logger", logger)
+        logger_.info("Grid search hparams: %s", hp)
+        model.train(train)
+        # metrics = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)
+        # score, best_score = metrics[metric], best_metrics.get(metric, -1.0)
+        return model.validate(valid_mat), hp, model
+
+    args = list(
+        zip(
+            hparams_flat,
+            [[model_class, list(hparams_names), train_mat]] * len(hparams_flat),
         )
-        model.fit(train_mat)
-        metrics = evaluation.ranking_metrics_at_k(model, train_mat, valid_mat)
-        score, best_score = metrics[metric], best_metrics.get(metric, -1.0)
-        if score > best_score:
-            logger.info(
-                "Best model found! Old %s: %f new %s: %f hparams: %s",
-                metric,
-                best_score,
-                metric,
-                score,
-                hparams,
-            )
-            best_metrics = metrics
-            best_model = model
-            best_hparams = hparams
+    )
 
+    if parallel:
+        n_procs = min(len(hparams_flat), mp.cpu_count())
+        logger.info("Spawning %d processes for grid search", n_procs)
+        with mp.Pool(processes=n_procs) as pool:
+            res = pool.starmap(search, args)
+    else:
+        res = [search(*arg) for arg in args]
+
+    del search
+
+    best_score, best_hparams, best_model = max(res, key=lambda el: el[0])
     return {
         "model": best_model,
-        "hparams": dict(zip(hparams_names, best_hparams)),
-        "metrics": best_metrics,
+        "hparams": best_hparams,
+        "metrics": {"DCG@40": best_score},
     }
 
 
 def search_ground_truth(
     train_mat: sparse.csr_array,
-    valid_mat: sparse.csr_array,
+    valid_mat: np.ma.masked_array,
     base_save_path: Path,
     dataset: str,
-    metric: str = "ndcg",
+    # metric: str = "ndcg",
     **_,
-) -> implicit.als.AlternatingLeastSquares:
-    """
-    Fits a recommender system on a training set using matrix factorization as
-    described in http://yifanhu.net/PUB/cf.pdf, and evaluates performance on
-    a validation set according to the passed metric. This metric drives model
-    selection in a hyperparameter grid search.
-
-    Args:
-        train_mat: User-item training set to fit the matrix factors,
-                   in scipy.sparse.csr_array format.
-        valid_mat: User-item validation set, evaluated according to `metric`,
-                   in scipy.sparse.csr_array format.
-        base_save_path: The stem (complete filename without extension) of the
-                        file the best model is saved to. The model is saved to
-                        `base_save_path`.npy, and the hypeparameters and
-                        evaluation metrics to  `base_save_path`_hparams.txt.
-        metric: The evaluation metric used to test the trained model, provided
-                in the implicit/evaluation.pyx module. Supported values are:
-                ['precision', map', 'ndcg', 'auc']. Defaults to 'map'.
-        hyperparams: A mapping from valid implicit.als.AlternatingLeastSquares
-                     keyword arguments to list of values. The cartesian product
-                     of these values is used for grid search.
-
-    Returns:
-        The best matrix factorization model found according to `metric`, with
-        factors stored in `model.user_factors` and `model.item_factors`.
-    """
-
-    hyperparams = constants.ground_truth_hparams
-    logger.info("Hyperparameters in grid search:")
+) -> recsys.Recommenders:
+    hyperparams = constants.GROUND_TRUTH_HP[dataset]
+    logger.info("Hyperparameters in grid search for dataset %s:", dataset)
     logger.info(pprint.pformat(hyperparams))
+
+    ground_truth_model_class = recsys.GROUND_TRUTH_MODELS[dataset]
+    logger.info("Ground truth for %s, model: %s", dataset, ground_truth_model_class)
 
     best_dict = search_best_model(
         train_mat,
         valid_mat,
-        dataset,
         hyperparams.keys(),
         list(it.product(*hyperparams.values())),
-        metric,
+        ground_truth_model_class,
     )
 
     model_save_path = f"{base_save_path}.npz"
@@ -141,27 +114,21 @@ def search_ground_truth(
 
     hparams_save_path = f"{base_save_path}_hparams.txt"
     save_hyperparams_and_metrics(
-        hparams_save_path, best_dict["hparams"], best_dict["metrics"], metric
+        hparams_save_path, best_dict["hparams"], best_dict["metrics"]
     )
 
     return best_dict["model"]
 
 
 def search_recommender(
-    train_mat: sparse.csr_array,
-    valid_mat: sparse.csr_array,
+    train_mat: pd.DataFrame,
+    valid_mat: np.ma.masked_array,
     base_save_path: Path,
-    metric: str = "ndcg",
+    # metric: str = "ndcg",
     **_,
 ):
-    """
-    This function trains a model for each factor and saves the best model for
-    each factor.
-    To be used with the recommender models.
-    """
-
     hyperparams = constants.recommender_hparams
-    logger.info("Hyperparameters in recommender grid search:")
+    logger.info("%s, Hyperparameters in recommender grid search:", recsys.FSVD)
     logger.info(pprint.pformat(hyperparams))
 
     hyperparams_inner = hyperparams.copy()
@@ -175,7 +142,12 @@ def search_recommender(
         # this not implemented rn
         hparams = list((factor,) + hp for hp in hyperparams_inner_flat)
         best_dict = search_best_model(
-            train_mat, valid_mat, hyperparams.keys(), hparams, metric
+            train_mat,
+            valid_mat,
+            hyperparams.keys(),
+            hparams,
+            recsys.FSVD,
+            parallel=True,
         )
 
         model_save_path = f"{base_save_path}_factors_{factor}.npz"
@@ -184,71 +156,23 @@ def search_recommender(
 
         hparams_save_path = f"{base_save_path}_factors_{factor}_hparams.txt"
         save_hyperparams_and_metrics(
-            hparams_save_path, best_dict["hparams"], best_dict["metrics"], metric
+            hparams_save_path, best_dict["hparams"], best_dict["metrics"]
         )
 
 
-# NOTE increase the value of seed with next() so that calling the function twice
-# yields different results; look at how an integer seed is always reinitialized
-# in implicit.evaluation.train_test_split
-def csr_dataset_splits(
-    dataset: np.ndarray, seed_gen: utils.SeedSequence
-) -> Tuple[sparse.csr_array, ...]:
-    dataset_csr = sparse.csr_array(dataset)
-    logger.info("Splitting the dataset into 70/10/20% train/validation/test splits...")
-    train_csr, tmp_csr = evaluation.train_test_split(
-        dataset_csr, train_percentage=0.7, random_state=next(seed_gen)
-    )
-    valid_csr, test_csr = evaluation.train_test_split(
-        tmp_csr, train_percentage=2 / 3, random_state=next(seed_gen)
-    )
-    return train_csr, valid_csr, test_csr
-
-
-def recommender_input_data(
-    ground_truth: np.ndarray,
-    seed_gen: utils.SeedSequence,
-    rng: np.random.Generator,
-    downsampling_ratio: float = None,
-) -> Tuple[sparse.csr_array, ...]:
-
-    if downsampling_ratio is None:
-        logger.info("Take ground truth input for recommender without downsampling")
-        return csr_dataset_splits(ground_truth, seed_gen)
-
-    logger.info(
-        "Downsampling the ground truth data to %d% to train the recommender",
-        downsampling_ratio * 100,
-    )
-    # we mask 80% of the ground truth data because in section 5.1 they say:
-    # the simulated recommender system estimates relevance scores using low-rank
-    # matrix completion (Bell and Sejnowski 1995) on a training sample of 20% of
-    # the ground truth preferences
-    indices = [
-        (i, j)
-        for i in range(ground_truth.shape[0])
-        for j in range(ground_truth.shape[1])
-    ]
-    sample = rng.choice(indices, size=int(0.2 * len(indices)), replace=False)
-    ground_truth_masked = np.zeros_like(ground_truth)
-    ground_truth_masked[sample[:, 0], sample[:, 1]] = ground_truth[
-        sample[:, 0], sample[:, 1]
-    ]
-    return csr_dataset_splits(ground_truth_masked, seed_gen)
-
-
 def generate_ground_truth(
-    dataset_name: str, base_save_path: Path, seed_gen: utils.SeedSequence, **kwargs
-) -> implicit.als.AlternatingLeastSquares:
+    dataset_name: str, base_save_path: Path, rng: np.random.Generator, **kwargs
+) -> recsys.Recommenders:
     logger.info("Loading and preprocessing dataset %s...", dataset_name)
     dataset = datasets.get_dataset(dataset_name, **kwargs)
-    train_csr, valid_csr, _ = csr_dataset_splits(dataset.values, seed_gen)
-    return search_ground_truth(train_csr, valid_csr, base_save_path, **kwargs)
+    train, valid, _ = utils.train_test_split_mask(dataset, 0.7, rng, valid_prop=0.1)
+    return search_ground_truth(
+        sparse.csr_array(train.filled()), valid, base_save_path, dataset_name, **kwargs
+    )
 
 
 def generate_recommenders(
     base_save_path: Path,
-    seed_gen: utils.SeedSequence,
     rng: np.random.Generator,
     dataset_name: str = None,
     ground_truth_model_path: Path = None,
@@ -257,22 +181,25 @@ def generate_recommenders(
 ):
     if ground_truth_model_path is not None and ground_truth_model_path.exists():
         logger.info("Loading ground truth preferences from %s", ground_truth_model_path)
-        ground_truth = load_preferences(ground_truth_model_path)
+        model_class = recsys.GROUND_TRUTH_MODELS[dataset_name]
+        ground_truth_model = model_class.load(ground_truth_model_path)
     elif dataset_name is not None and dataset_name in datasets.DATASETS_RETRIEVE:
         logger.info("Generating ground truth preferences for dataset: %s", dataset_name)
         ground_truth_model = generate_ground_truth(
-            dataset_name,
-            base_save_path,
-            seed_gen,
-            **kwargs,
+            dataset_name, base_save_path, rng, **kwargs
         )
-        ground_truth = get_preferences(ground_truth_model)
     else:
         logger.error("No recommender system implemented for dataset %s", dataset_name)
         raise NotImplementedError
 
-    train_csr, valid_csr, test_csr = recommender_input_data(
-        ground_truth, seed_gen, rng, downsampling_ratio=downsampling_ratio
+    train, valid, _ = utils.train_test_split_mask(
+        ground_truth_model.preferences, 0.7, rng, valid_prop=0.1
+    )
+    # shape the dataframe in the format wanted by funk_svd.SVD
+    train_df = (
+        pd.DataFrame(train.filled())
+        .melt(var_name="i_id", value_name="rating", ignore_index=False)
+        .reset_index(names="u_id")
     )
     logger.info("Start fitting the recommender models.")
-    search_recommender(train_csr, valid_csr, base_save_path, **kwargs)
+    search_recommender(train_df, valid, base_save_path, **kwargs)
