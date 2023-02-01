@@ -43,12 +43,7 @@ class Recommender:
         self.factors = factors
         self.logger = logging.getLogger(f"{__name__}:{type(self).__name__}")
 
-    def train(
-        # self, train_mat: Union[pd.DataFrame, sparse.csr_array], show_progress=True
-        self,
-        train_mat: Union[np.ndarray, sparse.csr_array],
-        show_progress=True,
-    ):
+    def train(self, train_mat: Union[np.ndarray, sparse.csr_array], show_progress=True):
         if isinstance(train_mat, np.ndarray):
             train_mat = sparse.csr_array(train_mat)
         self.model.fit(train_mat, show_progress=show_progress)
@@ -85,6 +80,7 @@ class Recommender:
     def load(cls, filename: Path) -> RecommenderType:
         ret = cls(32)
         ret.model = cls._model_class.load(filename)
+        ret.factors = ret.model.factors
         ret.set_preferences()
         return ret
 

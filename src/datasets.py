@@ -76,10 +76,11 @@ def get_movielens(conf: config.Configuration) -> pd.DataFrame:
     # spread into user X item rating matrix
     user_item_df = user_item_df.pivot(
         index="user", columns="item", values="score"
-    ).fillna(0)
+    ).fillna(0.0)
     # ratings are on a 1-5 scale, sum non-zero entries to get user/items with
     # most ratings
     bool_df = user_item_df.astype(bool)
+    # bool_df = user_item_df.notnull()
     # filter top 2000 most rated users
     topk_users = (
         bool_df.sum(axis=1)

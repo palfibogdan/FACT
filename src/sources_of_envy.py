@@ -10,9 +10,6 @@ import utils
 
 logger = logging.getLogger(__name__)
 
-# TODO try:
-# - movielens with float ratings
-
 
 def compute_utilities(
     reward_prob: np.ndarray, expected_reward: np.ndarray
@@ -69,26 +66,17 @@ def experiment_5_1_1(
     model_class: recsys.RecommenderType,
 ) -> Dict[str, Dict[int, np.ndarray]]:
 
-    # ground_truth_probs = utils.softmax(ground_truth, temperature=temperature)
-    # ground_truth_rescaled = ground_truth_probs
-    # ground_truth_rescaled = utils.minmax_scale(ground_truth)
-    ground_truth_rescaled = ground_truth
-
     # dictionary to store the metrics by factors, easy to use with pandas
     metrics_dict = {"mean_envy": {}, "prop_eps_envy": {}}
 
     for filename in recommender_filenames:
-
         recommender_model = model_class.load(filename)
-
         recommender_probs = utils.softmax(
             recommender_model.preferences, temperature=temperature
         )
-        # recommender_probs = recommender_model.preferences
-
-        utilities = compute_utilities(recommender_probs, ground_truth_rescaled)
-
+        utilities = compute_utilities(recommender_probs, ground_truth)
         mean_envy, prop_envy_users = get_envy_metrics(utilities, eps)
+
         metrics_dict["mean_envy"][recommender_model.factors] = mean_envy
         metrics_dict["prop_eps_envy"][recommender_model.factors] = prop_envy_users
 
@@ -117,3 +105,18 @@ def envy_from_misspecification(
             conf.recommender_models[dataset],
         )
     return metrics
+
+
+# conf = config.Configuration(
+#     # datasets=["lastfm", "movielens"],
+#     datasets=["lastfm"],
+#     lastfm_ground_truth_file=config.LASTFM_RECOMMENDER_DIR / "model_ground_truth.npz",
+#     lastfm_recommender_dir=config.LASTFM_RECOMMENDER_DIR,
+#     movielens_ground_truth_file=config.MOVIELENS_RECOMMENDER_DIR
+#     / "model_ground_truth.npz",
+#     movielens_recommender_dir=config.MOVIELENS_RECOMMENDER_DIR,
+#     lastfm_ground_truth_model="ALS",
+#     movielens_ground_truth_model="ALS",
+#     lastfm_recommender_model="ALS",
+#     movielens_recommender_model="ALS",
+# )
