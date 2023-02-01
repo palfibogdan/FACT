@@ -91,9 +91,15 @@ class Recommender:
 class ALS(Recommender):
     _model_class = AlternatingLeastSquares
 
-    def __init__(self, factors: int, regularization: float = None, alpha: float = None):
+    def __init__(
+        self,
+        factors: int,
+        random_state: int,
+        regularization: float = None,
+        alpha: float = None,
+    ):
         super().__init__(factors)
-        args = {"factors": factors, "iterations": 30}
+        args = {"factors": factors, "iterations": 30, "random_state": random_state}
         # use defaults from implicit if regularization and alpha are not passed
         if regularization is not None:
             args["regularization"] = regularization
@@ -109,10 +115,14 @@ class LMF(Recommender):
     _model_class = LogisticMatrixFactorization
 
     def __init__(
-        self, factors: int, learning_rate: float = None, regularization: float = None
+        self,
+        factors: int,
+        random_state: int,
+        learning_rate: float = None,
+        regularization: float = None,
     ):
         super().__init__(factors)
-        args = {"factors": factors, "iterations": 30}
+        args = {"factors": factors, "iterations": 30, "random_state": random_state}
         if learning_rate is not None:
             args["learning_rate"] = learning_rate
         if regularization is not None:

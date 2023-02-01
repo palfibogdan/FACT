@@ -29,9 +29,9 @@ def save_hyperparams_and_metrics(filename: Path, hparams: dict, info: dict):
 def train_eval_one_configuration(
     hp: dict, rest
 ) -> Tuple[Dict[str, float], Dict[str, float], recsys.RecommenderType]:
-    model_class, hparams_names, train, valid, k = rest
+    model_class, hparams_names, train, valid, k, seedgen = rest
     hp = dict(zip(hparams_names, hp))
-    model = model_class(**hp)
+    model = model_class(**hp, random_state=next(seedgen))
     logger_ = getattr(model, "logger", logger)
     logger_.info("Grid search hparams: %s", hp)
     model.train(train)
@@ -48,7 +48,14 @@ def search_best_model(
     conf: config.Configuration,
 ) -> dict:
     repeat_args = [
-        [model_class, list(hparams_names), train_mat, valid_mat, conf.evaluation_k]
+        [
+            model_class,
+            list(hparams_names),
+            train_mat,
+            valid_mat,
+            conf.evaluation_k,
+            seedgen,
+        ]
     ] * len(hparams_flat)
     args = list(zip(hparams_flat, repeat_args))
 
