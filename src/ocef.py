@@ -10,12 +10,17 @@ import os
 # Verify indices for Beta (Lemma 4 returns Beta_t but OCEF uses Beta_(t-1) )
 # Implement get_phi from Lemma 5 and 6
 
+sigma = 0.4
+
 # check out robin initialization
 # problem probably lies in the values of the bounds of the arms not pulled
 def update_bounds(delta, N, rewards):
-
-    sigma = 0.5
+    
     omega = 0.01
+
+    # original
+    # sigma = 0.5 (deduced from paper)
+    # omega = 0.99 (confirmed by authors)
 
     theta = np.log(1 + omega) * ((omega * delta) / (2 * (2 + omega))) ** (
         1 / (1 + omega))
@@ -26,25 +31,20 @@ def update_bounds(delta, N, rewards):
 
     K = len(N) - 1
     for n, r in zip(N, rewards):
-
+        
         if n == 0:
+            # calculate bounds as if they were chosen once
             mean_mu = 0
             n = 1
         else:
             mean_mu = r / n
 
-        # OG (2.5x too much duration)
         beta = np.sqrt(
             (2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega)) / n
         * np.log(2 * (K + 1) / theta * np.log((1 + omega) * n)))
-        
-        # first half of formula, too short
-        # beta = np.sqrt(2 * sigma**2 * (1 + np.sqrt(omega)) ** 2 * (1 + omega) / n)
 
         betas.append(beta)
 
-        # low_bounds.append(max(mean_mu - beta, 0))
-        # high_bounds.append(min(mean_mu + beta, 1))
         low_bounds.append(mean_mu - beta)
         high_bounds.append(mean_mu + beta)
 
@@ -74,7 +74,7 @@ def get_conservarive_constraint(
 
     xi = 0
     for s in A:
-        xi += reward_history[s] #- Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
+        xi += reward_history[s]
 
     xi = xi - Phi + low_bound_l + (N - (1 - alpha) * t) * high_bound_0
 
@@ -87,48 +87,14 @@ def get_phi(N, delta, betas):
     if A == 0:
         small_phi = 0
     else:
-        small_phi = 1/2 * np.sqrt(2 * A * np.log(6 * A**2/delta)) + 2/3 * np.log(6 * A**2/delta)
+        small_phi = sigma * np.sqrt(2 * A * np.log(6 * A**2/delta)) + 2/3 * np.log(6 * A**2/delta)
     
     sum_K = np.sum(np.multiply(N[1:], betas[1:]))
     
     return min(sum_K, small_phi)
 
 
-def init(delta, means, S):
-    
-    N = [0] * (len(S) + 1)
-    rewards = [0] * (len(S) + 1)
-    reward_history = []
-    A = []
-    # sample each arm twice
-    for _ in range(2):
-        N[0] += 1
-        r = np.random.binomial(1, means[0])
-        rewards[0] += r
-        reward_history.append(r)
-        betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
-        for k in S:
-            N[k] += 1
-            r = np.random.binomial(1, means[k])
-            rewards[k] += r
-            reward_history.append(r)
-
-            betas, low_bounds, high_bounds = update_bounds(delta, N, rewards)
-
-    return N, rewards, reward_history, A, betas, low_bounds, high_bounds
-
 def ocef(delta, alpha, epsilon, S, means):
-
-    # inits = init(delta, means, S)
-
-    # N = inits[0]
-    # rewards = inits[1]
-    # reward_history = inits[2]
-    # A = inits[3]
-    # betas = inits[4]
-    # low_bounds = inits[5]
-    # high_bounds = inits[6]
-    #t = len(reward_history)
     
     N = [0] * (len(means))
     rewards = [0] * (len(means))
@@ -256,6 +222,16 @@ def plot(alphas):
     fig.tight_layout()
     # set y axis to 10^4 for durations
     ax1.set_yscale("log")
+
+    # add all y ticks for ax1
+    ax1.set_yticks([1000.0, 5000.0, 10000.0, 50000.0])
+    ax1.set_yticklabels([0.1, 0.5, 1.0, 5.0])
+    
+    # write "x10^4" on left top of ax1
+    ax1.text(0.01, 1.03, "x10^4", transform=ax1.transAxes, fontsize=10, verticalalignment='top')
+    
+    ax1.grid()
+    ax2.grid()
     # ax1.set_yticks([0.1, 0.5, 1.0, 5.0])
     # ax1.set_yticklabels([0.1, 0.5, 1.0, 5.0])
    
@@ -263,13 +239,13 @@ def plot(alphas):
 
 
 def run_experiment(S, alphas, problems, num_runs=100):
-    
+
     for problem, means in enumerate(problems):
         print("Problem ", problem)
         for alpha in tqdm(alphas):
             temp_t = []
             temp_cost = []
-            for _ in range(100):
+            for _ in range(num_runs):
                 _, t, rewards = ocef(delta=0.05, alpha=alpha, epsilon=0.05, S=S, means=means)
                 temp_t.append(t)
                 temp_cost.append(t * means[0] - sum(rewards))
@@ -278,7 +254,6 @@ def run_experiment(S, alphas, problems, num_runs=100):
             mean_cost = sum(temp_cost) / len(temp_cost)
             tp = (mean_t, mean_cost)
             # save to file
-            # save as npy next time
             with open(f"src/results_ocef/problem{problem}.txt", "a") as f:
                 f.write(str(tp) + "\n")
 
@@ -303,18 +278,23 @@ def main():
     means[0], means[1] = means[1], means[0]
     problems.append(means)
     
+    prob = 3
     # temp_t = []
     # temp_cost = []
     # for _ in tqdm(range(100)):
-    #     _, t, rewards, = ocef(delta=0.05, alpha=0.01, epsilon=0.05, S=S, means=problems[1])
+    #     _, t, rewards, = ocef(delta=0.05, alpha=0.4, epsilon=0.05, S=S, means=problems[prob])
     #     temp_t.append(t)
-    #     temp_cost.append(t * problems[1][0] - sum(rewards))
+    #     temp_cost.append(t * problems[prob][0] - sum(rewards))
     
     # print("Avg duration:", sum(temp_t) / len(temp_t))
     # print("Avg cost:", sum(temp_cost) / len(temp_cost))
     # print("Timed out:", len([t for t in temp_t if t >= 70000]))
+    # print("Problem ", prob+1)
+    # print(problems[prob])
     
-    # run_experiment(S, alphas, problems, num_runs=100)
+
+
+    #run_experiment(S, alphas, problems, num_runs=100)
 
     plot(alphas)
 
