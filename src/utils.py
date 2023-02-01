@@ -2,13 +2,18 @@ import logging
 from typing import Tuple, Union
 
 import numpy as np
+import pandas as pd
 import scipy
+from implicit import evaluation
+from scipy import sparse
 
 
 class SeedSequence:
+    start: int
     val: int
 
-    def __init__(self, start: int = 42):
+    def __init__(self, start: int = 1):
+        self.start = start
         self.val = start
 
     def __next__(self) -> int:
@@ -17,7 +22,7 @@ class SeedSequence:
         return ret
 
     def __repr__(self) -> str:
-        return str(self.val)
+        return f"<{type(self).__name__}>:{self.val}"
 
 
 def setup_root_logging(level: int = logging.INFO):
@@ -85,96 +90,31 @@ def minmax_scale(a: np.ndarray) -> np.ndarray:
     return np.nan_to_num(rescaled)
 
 
-def make_mask(ids: np.ndarray, shape: Tuple[int]) -> np.ndarray:
-    """
-    Returns a binary mask of shape `shape` where the entries at indices `ids`
-    indicate masking (invisible).
-    NOTE ids should be a 2D np.ndarray of shape (#masked entries, 2).
-    """
-    assert len(ids.shape) == 2 and ids.shape[1] == 2
-    mask = np.zeros(shape, dtype=np.int32)
-    mask[ids[:, 0], ids[:, 1]] = 1
-    return mask
-
-
-def array_coords(shape: Tuple[int]) -> np.ndarray:
-    """
-    Returns the cartesian product of the indices of an array of size `shape` as
-    a 2D np.ndarray with shape `(np.prod(shape), 2)`.
-    """
-    return np.dstack(np.meshgrid(np.arange(shape[0]), np.arange(shape[1]))).reshape(
-        -1, 2
-    )
-
-
-def sample_entries(
-    arr: Union[np.ndarray, np.ma.masked_array],
-    retain_prop: float,
-    rng: np.random.Generator,
-) -> np.ma.masked_array:
-    """
-    Returns a 2D np.ma.masked_array copy of `arr` downsampled uniformly to
-    `retain_prop`, where retained entries are chosen from unmasked entries in
-    `arr`. The `fill_value` of the returned masked array is 0.
-    """
-    # get proportion of elements to be masked
-    drop_prop = 1.0 - retain_prop
-    # if `arr` does not have a mask already, we can sample over every entry;
-    # otherwise, we only sample where the existing mask is True (masked
-    # entries), and we hide the previously visible entries through inversion
-    if isinstance(arr, np.ma.masked_array):
-        samplable_ids = np.argwhere(arr.mask)
-        avail_mask = ~arr.mask
-        arr = arr.data
-    else:
-        samplable_ids = array_coords(arr.shape)
-        avail_mask = np.ma.nomask  # dummy initializer
-    # sample indices of entries to be masked
-    masked_ids = rng.choice(
-        samplable_ids, size=int(drop_prop * len(samplable_ids)), replace=False
-    )
-    # print(len(masked_ids))
-    # overlay the newly hidden entries on top of the existing ones, if any
-    mask = avail_mask + make_mask(masked_ids, arr.shape)
-    return np.ma.masked_array(arr, mask, fill_value=0.0)
-
-
-def train_test_split_mask(
-    data: np.ndarray,
+def train_test_split(
+    data: Union[np.ndarray, sparse.csr_array, pd.DataFrame],
     train_prop: float,
-    rng: np.random.default_rng,
+    seedgen: SeedSequence,
     valid_prop: float = None,
-) -> Tuple[np.ma.masked_array, ...]:
-    """
-    Splits `data` into a train and a test set according to `train_prop`, where
-    entries are sampled uniformly over the whole `data`. Returns the train and
-    test partitions as np.ma.masked_array; if `valid_prop` is specified, a
-    valdation set is also created and returned as the second element.
-    """
-    if valid_prop is not None and train_prop + valid_prop > 1.0:
-        raise Exception("train_prop + valid_prop must be < 1")
-    tot = np.prod(data.shape)
-    train = sample_entries(data, train_prop, rng)
-    # print(tot * train_prop)
-    # print(len(np.argwhere(train.mask == 0)))
-    # print(len(np.argwhere(train.mask)))
-
-    # FIXME sometimes this assertion fails because the first operand has +1
-    # element than the second! why?
-    assert len(np.argwhere(train.mask == 0)) == (tot * train_prop)
-
-    if valid_prop is not None:
-        # rescale the valdation proportion to available data proportion after
-        # train
+) -> Tuple[sparse.csr_matrix, ...]:
+    if not isinstance(data, (sparse.csr_array, sparse.csr_matrix)):
+        if isinstance(data, pd.DataFrame):
+            data = data.values
+        data = sparse.csr_array(data)
+    train, tmp = evaluation.train_test_split(data, train_prop, next(seedgen))
+    rest = (tmp,)
+    if isinstance(valid_prop, float):
         valid_prop_scaled = valid_prop / (1.0 - train_prop)
-        valid = sample_entries(train, valid_prop_scaled, rng)
-        assert len(np.argwhere(valid.mask == 0)) == (
-            (tot - (tot * train_prop)) * valid_prop_scaled
-        )
-        # bitwise and between the train mask and validation mask compuounds the
-        # masked entries, leaving only the test ones
-        test = np.ma.masked_array(data, train.mask ^ valid.mask)
+        valid, test = evaluation.train_test_split(tmp, valid_prop_scaled, next(seedgen))
         rest = (valid, test)
-    else:
-        rest = (np.ma.masked_array(data, ~train.mask),)
     return (train,) + rest
+
+
+# NOTE works also with pandas dataframe
+def normalize(arr: np.ndarray, axis=0) -> np.ndarray:
+    mean = arr.mean(axis=axis)
+    std = arr.std(axis=axis)
+    if axis == 1:
+        mean = mean[:, None]
+        std = std[:, None]
+    return arr - mean
+    # return (arr - mean) / std

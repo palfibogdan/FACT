@@ -5,12 +5,12 @@ import numpy as np
 
 import config
 import recommender
+import recommender_models as recsys
 import utils
 
 logger = logging.getLogger(__name__)
 
-# TO TRY
-# - one-hot ground truth rewards instead of probabilities
+# TODO try:
 # - movielens with float ratings
 
 
@@ -66,39 +66,28 @@ def experiment_5_1_1(
     ground_truth: np.ndarray,
     eps: float,
     temperature: float,
+    model_class: recsys.RecommenderType,
 ) -> Dict[str, Dict[int, np.ndarray]]:
-    """
-    Loads trained recommendation system models, gets the utility matrix given by
-    these models and calculates the average envy and the proportion of
-    eps-envious users.
-    Return list of average envy and proportion of eps-envious users for each
-    number of factors
-    """
 
     # ground_truth_probs = utils.softmax(ground_truth, temperature=temperature)
-    ground_truth_rescaled = utils.minmax_scale(ground_truth)
+    # ground_truth_rescaled = ground_truth_probs
+    # ground_truth_rescaled = utils.minmax_scale(ground_truth)
+    ground_truth_rescaled = ground_truth
 
     # dictionary to store the metrics by factors, easy to use with pandas
     metrics_dict = {"mean_envy": {}, "prop_eps_envy": {}}
 
     for filename in recommender_filenames:
 
-        # load recommender_system_model
-        recommender_model = recommender.load_recommeder_model(filename)
+        recommender_model = model_class.load(filename)
 
-        # 2D: recommendation scores for each item per each user
-        recommender_preferences = recommender.get_preferences(recommender_model)
-        # convert to probabilities
         recommender_probs = utils.softmax(
-            recommender_preferences, temperature=temperature
+            recommender_model.preferences, temperature=temperature
         )
+        # recommender_probs = recommender_model.preferences
 
-        # get utilities: recommender prob of selected item * ground truth
-        # expected reward for that item
         utilities = compute_utilities(recommender_probs, ground_truth_rescaled)
 
-        # compute the required metrics and store them in a dictionary for each
-        # latent factor
         mean_envy, prop_envy_users = get_envy_metrics(utilities, eps)
         metrics_dict["mean_envy"][recommender_model.factors] = mean_envy
         metrics_dict["prop_eps_envy"][recommender_model.factors] = prop_envy_users
@@ -106,33 +95,25 @@ def experiment_5_1_1(
     return metrics_dict
 
 
-def do_envy_from_mispecification(
-    recommenders_file_name: str = "model",
-    lastfm_models_dir=config.LASTFM_RECOMMENDER_DIR,
-    movielens_models_dir=config.MOVIELENS_RECOMMENDER_DIR,
-    plots_dir=config.PLOTS_DIR,
-    **_,
+def envy_from_misspecification(
+    conf: config.Configuration,
 ) -> Dict[str, Dict[str, Dict[int, np.ndarray]]]:
-    epsilon, temperature = 0.05, 5
-
-    lastfm_recommenders = lastfm_models_dir.glob(
-        f"{recommenders_file_name}_factors*.npz"
-    )
-    lastfm_ground_truth = recommender.load_preferences(
-        lastfm_models_dir / f"{recommenders_file_name}.npz"
-    )
-    lastfm_metrics = experiment_5_1_1(
-        lastfm_recommenders, lastfm_ground_truth, epsilon, temperature
-    )
-
-    movielens_recommenders = movielens_models_dir.glob(
-        f"{recommenders_file_name}_factors*.npz"
-    )
-    movielens_ground_truth = recommender.load_preferences(
-        movielens_models_dir / f"{recommenders_file_name}.npz"
-    )
-    movielens_metrics = experiment_5_1_1(
-        movielens_recommenders, movielens_ground_truth, epsilon, temperature
-    )
-
-    return {"lastfm": lastfm_metrics, "movielens": movielens_metrics}
+    metrics = {}
+    for dataset in conf.datasets:
+        recommender.generate_recommenders(
+            conf.ground_truth_files[dataset], dataset, conf.random_state, conf
+        )
+        models_dir = conf.recommender_dirs[dataset]
+        recommenders_by_factors = models_dir.glob(
+            f"{conf.model_base_name}_factors*.npz"
+        )
+        ground_truth_class = conf.ground_truth_models[dataset]
+        ground_truth_model = ground_truth_class.load(conf.ground_truth_files[dataset])
+        metrics[dataset] = experiment_5_1_1(
+            recommenders_by_factors,
+            ground_truth_model.preferences,
+            conf.epsilon,
+            conf.temperature,
+            conf.recommender_models[dataset],
+        )
+    return metrics

@@ -8,6 +8,8 @@ import implicit
 import numpy as np
 import pandas as pd
 import recommender
+import recommender_models
+import scipy
 import sklearn
 import utils
 from implicit import evaluation
@@ -61,9 +63,11 @@ model_makers = [
 ]
 
 
-lastfm_gt = recommender.load_preferences(config.LASTFM_RECOMMENDER_DIR / "model.npz")
-train_gt, valid_gt, test_gt = utils.train_test_split_mask(
-    lastfm_gt, 0.7, rng, valid_prop=0.1
+lastfm_gt = recommender_models.LMF.load(
+    config.LASTFM_RECOMMENDER_DIR / "model_ground_truth.npz"
+).preferences
+train_gt, valid_gt, test_gt = utils.train_test_split(
+    lastfm_gt, 0.7, seedgen, valid_prop=0.1
 )
 
 for fill in [True, False]:
@@ -76,21 +80,6 @@ for fill in [True, False]:
         print(f"fill: {fill} model: {model.__class__} dcg: {score}")
 
 
-# train_gt_df = lengthen_df(pd.DataFrame(train_gt.filled()))
-
-# svd = funk_svd.SVD(lr=0.001, reg=0.005, n_epochs=20, n_factors=32, shuffle=False)
-# svd.fit(train_gt_df)
-# recommender_preferences = (svd.pu_ @ svd.qi_.T) + svd.bu_[:, None] + svd.bi_[None, :]
-
-# print(validate(valid_gt, recommender_preferences))
-
-# svd = funk_svd.SVD(lr=0.001, reg=0.005, n_epochs=20, n_factors=32, shuffle=False)
-# svd.fit(train_gt_df)
-# nan_prefs = (svd.pu_ @ svd.qi_.T) + svd.bu_[:, None] + svd.bi_[None, :]
-
-# preds = svd.predict(valid_gt_df)
-# print(sklearn.metrics.mean_absolute_error(valid_gt_df["rating"], preds))
-
 # ------------------------------
 # options:
 # - ndcg with both, problem: works on ground truths (implicit), it doesn't with
@@ -102,19 +91,98 @@ for fill in [True, False]:
 #      our own train_test_split_mask
 
 
-# train_gt_sparse = sparse.csr_array(train_gt.filled())
+import time
 
-# model = implicit.als.AlternatingLeastSquares(
-#     factors=32, random_state=next(seedgen), iterations=20
-# )
-# model.fit(train_gt_sparse)
-# prefs = model.user_factors @ model.item_factors.T
-# print(validate(valid_gt, prefs))
+from scipy.sparse.linalg import svds
+
+movielens = datasets.get_movielens()
+train_ml, valid_ml, test_ml = utils.train_test_split_mask(
+    movielens.values, 0.7, rng, 0.1
+)
+# train_ml = train_ml.filled(0.0)
+
+start = time.time()
+# U, sigma, Vt = svds(train_gt.filled(0.0), k=32, random_state=rng)
+U, sigma, Vt = svds(train_ml, k=32, random_state=rng)
+print(f"svds time: {time.time() - start}")
+# print(sklearn.metrics.mean_squared_error(lastfm_gt, U @ np.diag(sigma) @ Vt))
+print(
+    sklearn.metrics.mean_squared_error(
+        movielens, U @ np.diag(sigma) @ Vt, squared=False
+    )
+)
+print(sklearn.metrics.mean_squared_error(movielens, U @ Vt, squared=False))
 
 
-# model = implicit.lmf.LogisticMatrixFactorization(
-#     factors=32, iterations=20, random_state=next(seedgen)
-# )
-# model.fit(train_gt_sparse)
-# prefs = model.user_factors @ model.item_factors.T
-# print(validate(valid_gt, prefs))
+fsvd = recommender_models.FSVD(32)
+start = time.time()
+# fsvd.train(lengthen_df(pd.DataFrame(train_gt)))
+fsvd.train(lengthen_df(pd.DataFrame(train_ml)))
+print(f"fsvd time: {time.time() - start}")
+# print(sklearn.metrics.mean_squared_error(lastfm_gt, fsvd.preferences))
+print(sklearn.metrics.mean_squared_error(movielens, fsvd.preferences, squared=False))
+
+
+als = recommender_models.ALS(32)
+start = time.time()
+# als.train(sparse.csr_array(train_gt))
+als.train(sparse.csr_array(train_ml))
+print(f"als time: {time.time() - start}")
+# print(sklearn.metrics.mean_squared_error(lastfm_gt, als.preferences))
+print(sklearn.metrics.mean_squared_error(movielens, als.preferences, squared=False))
+
+
+als = recommender_models.ALS(32)
+train, _ = implicit.evaluation.train_test_split(
+    sparse.csr_array(movielens.values), 0.7, random_state=next(seedgen)
+)
+start = time.time()
+# als.train(sparse.csr_array(train_gt))
+als.train(train)
+print(f"als time: {time.time() - start}")
+# print(sklearn.metrics.mean_squared_error(lastfm_gt, als.preferences))
+print(sklearn.metrics.mean_squared_error(movielens, als.preferences, squared=False))
+
+
+mat = rng.choice(10, size=(6, 6)).astype(np.float32)
+mat
+u, s, v = svds(mat, k=3, random_state=rng)
+print(sklearn.metrics.mean_squared_error(mat, u @ np.diag(s) @ v, squared=False))
+
+ss = np.sqrt(s)
+assert np.allclose((u @ np.diag(ss)) @ (np.diag(ss) @ v), u @ np.diag(s) @ v)
+
+
+start = time.time()
+# U, sigma, Vt = svds(train_gt.filled(0.0), k=32, random_state=rng)
+U, sigma, Vt = svds(train_gt, k=32, random_state=rng)
+print(f"svds time: {time.time() - start}")
+# print(sklearn.metrics.mean_squared_error(lastfm_gt, U @ np.diag(sigma) @ Vt))
+reconstruction = U @ np.diag(sigma) @ Vt
+print(sklearn.metrics.mean_squared_error(lastfm_gt, reconstruction, squared=False))
+ss = np.diag(np.sqrt(sigma))
+rec2 = (U @ ss) @ (ss @ Vt)
+assert np.allclose(reconstruction, rec2, rtol=1e-5, atol=1e-5)
+np.allclose(reconstruction, lastfm_gt)
+
+
+import config
+from implicit import evaluation
+from sklearn.metrics import mean_squared_error as mse
+
+seedgen = utils.SeedSequence(5)
+
+lastfm_gt = LMF.load(config.LASTFM_RECOMMENDER_DIR / "model.npz").preferences
+train, test = evaluation.train_test_split(
+    sparse.csr_array(lastfm_gt), 0.7, next(seedgen)
+)
+
+svd = SVDS(8, seedgen)
+svd.train(train)
+print(f"rmse: {mse(lastfm_gt, svd.preferences, squared=False)}")
+print(evaluation.ranking_metrics_at_k(svd, train, test, 40))
+
+svd.save("pippo_svd")
+
+new_svd = SVDS.load("pippo_svd")
+print(evaluation.ranking_metrics_at_k(new_svd, train, test, 40))
