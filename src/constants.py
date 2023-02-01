@@ -43,23 +43,23 @@ recommender_hparams = {
 }
 
 
-# testing
-ground_truth_hparams = {
-    ALS: {"factors": [2, 4]},
-    # LMF: lmf_gt_hparams,
-    # SVDS: {"factors": als_gt_hparams["factors"]},
-    # FSVD: {},
-}
-recommender_hparams = {
-    ALS: {
-        "factors": [2, 5]
-        # "regularization": [10 ** (i - 3) for i in range(4)],
-        # "alpha": [10 ** (i - 1) for i in range(4)],
-    },
-    LMF: {
-        "factors": recommender_hparams_og["factors"],
-        "regularization": [10 ** (i - 3) for i in range(4)],
-    },
-    SVDS: recommender_hparams_og,
-    FSVD: {},
-}
+# # testing
+# ground_truth_hparams = {
+#     ALS: {"factors": [2, 4]},
+#     # LMF: lmf_gt_hparams,
+#     # SVDS: {"factors": als_gt_hparams["factors"]},
+#     # FSVD: {},
+# }
+# recommender_hparams = {
+#     ALS: {
+#         "factors": [2, 5]
+#         # "regularization": [10 ** (i - 3) for i in range(4)],
+#         # "alpha": [10 ** (i - 1) for i in range(4)],
+#     },
+#     LMF: {
+#         "factors": recommender_hparams_og["factors"],
+#         "regularization": [10 ** (i - 3) for i in range(4)],
+#     },
+#     SVDS: recommender_hparams_og,
+#     FSVD: {},
+# }
