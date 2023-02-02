@@ -43,7 +43,7 @@ class Configuration:
     movielens_recommender_model: recsys.RecommenderType = "SVDS"
 
     epsilon: float = 0.05
-    temperature: float = 5.0
+    temperature: float = 1 / 5.0
     train_size: float = 0.7
     validation_size: float = 0.1
     lastfm_topk_artists: int = 2500

@@ -263,6 +263,8 @@ def main(conf: config.Configuration = None):
         results_dir.mkdir(exist_ok=True, parents=True)
         print("Running OCEF...")
         run_experiment(S, alphas, problems, num_runs=100, results_dir=results_dir)
+    else:
+        print(f"Plot using existing files from {results_dir}...")
     plot(alphas, results_dir=results_dir)
 
 

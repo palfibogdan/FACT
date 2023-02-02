@@ -1,6 +1,10 @@
 **/.xqz-u-egg
-lastfm
-movielens
+
+lastfm/*
+!lastfm/models
+movielens/*
+!movielens/models
+
 wandb
 plots
 **/.last_checked
