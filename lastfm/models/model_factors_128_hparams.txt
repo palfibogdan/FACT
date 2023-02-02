@@ -1,0 +1,2 @@
+factors,regularization,alpha,precision,map,ndcg,auc,model,used,seed_start
+128,1,100,0.33535542490646714,0.13701762276486237,0.3362501518385155,0.541573990297929,<class 'recommender_models.ALS'>,ndcg,42
