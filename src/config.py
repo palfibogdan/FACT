@@ -24,6 +24,9 @@ LASTFM_URL = "https://files.grouplens.org/datasets/hetrec2011/hetrec2011-lastfm-
 MOVIELENS_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
 
 
+OCEF_DIR = ROOT_DIR / "results_ocef"
+
+
 @dataclass
 class Configuration:
     assets_root_dir: Path = field(default_factory=lambda: ROOT_DIR)
@@ -49,6 +52,7 @@ class Configuration:
     recommender_evaluation_metric: str = "ndcg"
     evaluation_k: int = 40
 
+    ocef_dir: Path = None
     lastfm_recommender_dir: Path = None
     movielens_recommender_dir: Path = None
     lastfm_ground_truth_file: Path = None
@@ -67,6 +71,7 @@ class Configuration:
     def __post_init__(self):
         self.random_state = utils.SeedSequence(start=self.seed)
         self.assets_root_dir = Path(self.assets_root_dir)
+        self.ocef_dir = self.assets_root_dir / "results_ocef"
 
         def make_folders(ds):
             for dir_ in ["data", "models"]:

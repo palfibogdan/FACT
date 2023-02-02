@@ -5,13 +5,14 @@ from pprint import pprint
 
 import config
 import constants
+import ocef
 import recommender_models as recsys
 import sources_of_envy
 import utils
 
 EXPERIMENT_NAMES = ["envy-misspecification", "bandit-synthetic"]
 EXPERIMENT_FNS = dict(
-    zip(EXPERIMENT_NAMES, [sources_of_envy.envy_from_misspecification, lambda _: None])
+    zip(EXPERIMENT_NAMES, [sources_of_envy.envy_from_misspecification, ocef.plot])
 )
 
 
@@ -99,14 +100,6 @@ def parse_option() -> config.Configuration:
         action="store_true",
         help="Whether to run grid searches in parallel, useful with FSVD.",
     )
-
-    # TODO various epsilon, temperature etc
-    # parser.add_argument(
-    #     "--plots_dir",
-    #     type=str,
-    #     default=config.PLOTS_DIR,
-    #     help="Folder where the experiments plots are saved",
-    # )
     parser.add_argument(
         "--datasets",
         default=["movielens", "lastfm"],
@@ -134,6 +127,7 @@ def parse_option() -> config.Configuration:
         choices=EXPERIMENT_NAMES,
         help="Name of the experiment to reproduce from the original paper.",
     )
+    # TODO various epsilon, temperature etc
 
     args = parser.parse_args()
     kwargs = vars(args)
@@ -144,7 +138,8 @@ def parse_option() -> config.Configuration:
 def main(conf: config.Configuration):
     pprint(dataclasses.asdict(conf))
     res = EXPERIMENT_FNS[conf.experiment](conf)
-    pprint(res)
+    if res is not None:
+        pprint(res)
     return res
 
 

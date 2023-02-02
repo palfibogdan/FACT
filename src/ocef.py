@@ -1,6 +1,11 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
+
+import config
+import constants
 
 # TODO:
 # Implement conservative constraint Xi
@@ -174,7 +179,7 @@ def prints(betas, low_bounds, high_bounds, N, xi, S, rewards, t):
         print(t)
 
 
-def plot(alphas):
+def plot(alphas, results_dir: Path = config.OCEF_DIR):
 
     # save as npy next time...
 
@@ -183,7 +188,7 @@ def plot(alphas):
 
     for i in range(1, 5):
         # read from file
-        with open(f"src/results_ocef/problem{i}.txt", "r") as f:
+        with open(results_dir / f"problem{i}.txt", "r") as f:
             data = f.read()
 
         data = data.split("\n")
@@ -246,11 +251,13 @@ def plot(alphas):
     # ax1.set_yticks([0.1, 0.5, 1.0, 5.0])
     # ax1.set_yticklabels([0.1, 0.5, 1.0, 5.0])
 
-    plt.show()
+    # plt.show()
+    plt.savefig(results_dir / "ocef.png")
 
 
-def run_experiment(S, alphas, problems, num_runs=100):
-
+def run_experiment(
+    S, alphas, problems, num_runs=100, results_dir: Path = config.OCEF_DIR
+):
     for problem, means in enumerate(problems):
         print("Problem ", problem)
         for alpha in tqdm(alphas):
@@ -267,11 +274,15 @@ def run_experiment(S, alphas, problems, num_runs=100):
             mean_cost = sum(temp_cost) / len(temp_cost)
             tp = (mean_t, mean_cost)
             # save to file
-            with open(f"src/results_ocef/problem{problem}.txt", "a") as f:
+            with open(results_dir / f"problem{problem}.txt", "a") as f:
                 f.write(str(tp) + "\n")
 
 
-def main():
+def main(conf: config.Configuration = None):
+    # seed numpy's random generator for reproducibility
+    seed = constants.SEED if conf is None else conf.seed
+    np.random.seed(seed)
+
     S = [i for i in range(1, 10)]
     # alphas = [i / 10 for i in range(1, 6)]
     alphas = np.linspace(0.01, 0.5, 12)
@@ -291,7 +302,7 @@ def main():
     means[0], means[1] = means[1], means[0]
     problems.append(means)
 
-    prob = 3
+    # prob = 3
     # temp_t = []
     # temp_cost = []
     # for _ in tqdm(range(100)):
@@ -305,9 +316,12 @@ def main():
     # print("Problem ", prob+1)
     # print(problems[prob])
 
-    # run_experiment(S, alphas, problems, num_runs=100)
-
-    plot(alphas)
+    results_dir = config.OCEF_DIR if conf is None else conf.ocef_dir
+    if not results_dir.is_dir() or not any(results_dir.iterdir()):
+        results_dir.mkdir(exist_ok=True, parents=True)
+        print("Running OCEF...")
+        run_experiment(S, alphas, problems, num_runs=100, results_dir=results_dir)
+    plot(alphas, results_dir=results_dir)
 
 
 if __name__ == "__main__":
