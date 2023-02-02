@@ -40,7 +40,7 @@ def get_lastfm(conf: config.Configuration) -> pd.DataFrame:
     # the table is in long format originally
     user_item_df = user_item_df.pivot(
         index="user", columns="item", values="score"
-    ).fillna(0)
+    ).fillna(0.0)
     # keep only top k artists in each row (user)
     top_k_artists = (
         user_item_df.sum(axis=0)
@@ -98,7 +98,10 @@ def get_movielens(conf: config.Configuration) -> pd.DataFrame:
     # remap ratings {3, 4, 5} to a range of 5, and set ratings < 3 to 0
     # ratings_remap = dict(zip(range(1, 6), np.linspace(3, 5, 5)))
     # user_item_df = user_item_df.applymap(lambda rating: ratings_remap.get(rating, 0))
+    # reset_ratings = user_item_df.isin([1.0, 2.0, 3.0, 4.0, 5.0])
     user_item_df[user_item_df < 3] = 0
+    # user_item_df[reset_ratings] += 1
+
     return user_item_df
 
 

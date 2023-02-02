@@ -251,8 +251,8 @@ def plot(alphas, results_dir: Path = config.OCEF_DIR):
     # ax1.set_yticks([0.1, 0.5, 1.0, 5.0])
     # ax1.set_yticklabels([0.1, 0.5, 1.0, 5.0])
 
-    # plt.show()
-    plt.savefig(results_dir / "ocef.png")
+    fig.savefig(results_dir / "ocef.png")
+    plt.show()
 
 
 def run_experiment(
@@ -321,6 +321,8 @@ def main(conf: config.Configuration = None):
         results_dir.mkdir(exist_ok=True, parents=True)
         print("Running OCEF...")
         run_experiment(S, alphas, problems, num_runs=100, results_dir=results_dir)
+    else:
+        print(f"Plot using existing files from {results_dir}...")
     plot(alphas, results_dir=results_dir)
 
 
