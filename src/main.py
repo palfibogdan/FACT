@@ -12,7 +12,7 @@ import utils
 
 EXPERIMENT_NAMES = ["envy-misspecification", "bandit-synthetic"]
 EXPERIMENT_FNS = dict(
-    zip(EXPERIMENT_NAMES, [sources_of_envy.envy_from_misspecification, ocef.plot])
+    zip(EXPERIMENT_NAMES, [sources_of_envy.envy_from_misspecification, ocef.main])
 )
 
 
