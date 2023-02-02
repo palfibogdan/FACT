@@ -105,18 +105,3 @@ def envy_from_misspecification(
             conf.recommender_models[dataset],
         )
     return metrics
-
-
-# conf = config.Configuration(
-#     # datasets=["lastfm", "movielens"],
-#     datasets=["lastfm"],
-#     lastfm_ground_truth_file=config.LASTFM_RECOMMENDER_DIR / "model_ground_truth.npz",
-#     lastfm_recommender_dir=config.LASTFM_RECOMMENDER_DIR,
-#     movielens_ground_truth_file=config.MOVIELENS_RECOMMENDER_DIR
-#     / "model_ground_truth.npz",
-#     movielens_recommender_dir=config.MOVIELENS_RECOMMENDER_DIR,
-#     lastfm_ground_truth_model="ALS",
-#     movielens_ground_truth_model="ALS",
-#     lastfm_recommender_model="ALS",
-#     movielens_recommender_model="ALS",
-# )

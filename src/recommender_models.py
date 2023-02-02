@@ -50,7 +50,10 @@ class Recommender:
         self.set_preferences()
 
     def set_preferences(self):
-        user_factors, item_factors = self.model.user_factors, self.model.item_factors
+        user_factors = getattr(self.model, "user_factors", None)
+        item_factors = getattr(self.model, "item_factors", None)
+        if user_factors is None or item_factors is None:
+            return
         if isinstance(user_factors, implicit.gpu._cuda.Matrix):
             # model was trained on the GPU
             user_factors, item_factors = (
@@ -94,7 +97,7 @@ class ALS(Recommender):
     def __init__(
         self,
         factors: int,
-        random_state: int,
+        random_state: int = None,
         regularization: float = None,
         alpha: float = None,
     ):
@@ -117,7 +120,7 @@ class LMF(Recommender):
     def __init__(
         self,
         factors: int,
-        random_state: int,
+        random_state: int = None,
         learning_rate: float = None,
         regularization: float = None,
     ):
@@ -184,7 +187,7 @@ class SVDS(Recommender, MatrixFactorizationBase):
         self.logger.info("Saved best model to %s", savepath)
 
     @classmethod
-    def load(cls, filename: Path) -> "SVDS":
+    def load(cls, filename: Path, random_state=None) -> "SVDS":
         filename = check_extension(filename)
         ret = cls(32)
         with np.load(filename, allow_pickle=True) as data:
