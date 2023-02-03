@@ -171,7 +171,6 @@ def generate_ground_truth(
 ) -> recsys.RecommenderType:
     logger.info("Loading and preprocessing dataset %s...", dataset_name)
     dataset = datasets.get_dataset(dataset_name, conf)
-    # dataset = utils.normalize(dataset)
     train, valid, _ = utils.train_test_split(
         dataset, conf.train_size, seedgen, valid_prop=conf.validation_size
     )
@@ -204,7 +203,6 @@ def generate_recommenders(
         )
     else:
         preferences = ground_truth_model.preferences
-        # preferences = utils.normalize(ground_truth_model.preferences)
         train, valid, _ = utils.train_test_split(
             preferences, conf.train_size, seedgen, valid_prop=conf.validation_size
         )

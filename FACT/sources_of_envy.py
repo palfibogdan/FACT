@@ -2,6 +2,9 @@ import logging
 from typing import Dict, Sequence, Tuple
 
 import numpy as np
+import pandas as pd
+import seaborn as sns
+from matplotlib import pyplot as plt
 
 import config
 import recommender
@@ -85,8 +88,10 @@ def experiment_5_1_1(
 
 def envy_from_misspecification(
     conf: config.Configuration,
-) -> Dict[str, Dict[str, Dict[int, np.ndarray]]]:
+) -> pd.DataFrame:
+
     metrics = {}
+
     for dataset in conf.datasets:
         recommender.generate_recommenders(
             conf.ground_truth_files[dataset], dataset, conf.random_state, conf
@@ -103,4 +108,65 @@ def envy_from_misspecification(
             conf.temperature,
             conf.recommender_models[dataset],
         )
-    return metrics
+
+    return pd.concat(
+        [
+            pd.DataFrame(vals).assign(dataset=dataset)
+            for dataset, vals in metrics.items()
+        ]
+    )
+
+
+def persist_results(df: pd.DataFrame, conf: config.Configuration):
+    plt.rcParams["text.usetex"] = True
+    font = {"weight": "bold", "size": 12}
+    plt.rc("font", **font)
+
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 5))
+
+    sns.lineplot(data=df, x=df.index, y="mean_envy", hue="dataset", ax=ax0)
+    ax0.set_xlim(-5, 120)
+    ax0.set_xlabel("Factors")
+    ax0.set_ylabel("Average envy")
+    ax0.grid()
+
+    sns.lineplot(data=df, x=df.index, y="prop_eps_envy", hue="dataset", ax=ax1)
+    ax1.set_xlim(-5, 120)
+    ax1.set_xlabel("Factors")
+    ax1.set_ylabel(
+        r"Prop. of $\epsilon$-envy users ($\epsilon=" + str(conf.epsilon) + r"$)"
+    )
+    ax1.grid()
+
+    lastfm_gt = recsys.MODELS_MAP_REVERSE[conf.lastfm_ground_truth_model]
+    lastfm_recommender = recsys.MODELS_MAP_REVERSE[conf.lastfm_recommender_model]
+    movielens_gt = recsys.MODELS_MAP_REVERSE[conf.movielens_ground_truth_model]
+    movielens_recommender = recsys.MODELS_MAP_REVERSE[conf.movielens_recommender_model]
+    handles, _ = ax0.get_legend_handles_labels()
+    labels = [
+        f"Last.Fm-2k, {lastfm_gt}/{lastfm_recommender}",
+        f"MovieLens-{conf.movielens_version}, {movielens_gt}/{movielens_recommender}",
+    ]
+    ax0.legend(handles, labels)
+    ax1.legend(handles, labels)
+
+    fig.suptitle(
+        "Envy from model misspecification (ground truth model/recommender model)"
+    )
+    plt.tight_layout()
+
+    utils.makedir(config.ENVY_DIR)
+    plt.savefig(config.ENVY_DIR / f"{conf.envy_experiment_name}.png")
+    df.to_csv(
+        config.ENVY_DIR / f"{conf.envy_experiment_name}.csv", index_label="factors"
+    )
+    logger.info(
+        "Saved plot and CSV dataframe to %s",
+        config.ENVY_DIR / conf.envy_experiment_name,
+    )
+
+    plt.show()
+
+
+def do_envy_from_misspecification(conf: config.Configuration):
+    return persist_results(envy_from_misspecification(conf), conf)

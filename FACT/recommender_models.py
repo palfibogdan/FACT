@@ -4,8 +4,6 @@ from typing import Dict, Union
 
 import implicit
 import numpy as np
-import pandas as pd
-from funk_svd import SVD
 from implicit import evaluation
 from implicit.als import AlternatingLeastSquares as ALS_factory
 from implicit.cpu.als import AlternatingLeastSquares
@@ -20,7 +18,7 @@ import utils
 # LMF -> ground truth LastFm
 # SVD -> recommmenders both
 
-RecommenderType = Union["SVDS", "FSVD", "ALS", "LMF"]
+RecommenderType = Union["SVDS", "ALS", "LMF"]
 
 
 def check_extension(p: Path, ext: str = ".npz") -> Path:
@@ -201,79 +199,6 @@ class SVDS(Recommender, MatrixFactorizationBase):
         return ret
 
 
-class FSVD(Recommender, MatrixFactorizationBase):
-    _model_class = SVD
-    _model = None
-    num_threads: int = 0  # used by implicit.evaluation
-
-    # random_state unused here
-    def __init__(
-        self, factors: int, lr: float = None, regularization: float = None, **_
-    ):
-        super().__init__(factors)
-        args = {"n_factors": factors, "n_epochs": 30}
-        for k, v in zip(["lr", "reg"], [lr, regularization]):
-            if v is not None:
-                args[k] = v
-        self._model = SVD(**args)
-
-    @property
-    def model(self) -> "FSVD":
-        return self
-
-    # if train_df is not a pd.DataFrame, it assumes it is a structure in wide
-    # format (user X items)
-    def train(
-        self,
-        train_df: Union[pd.DataFrame, np.ndarray, sparse.csr_array],
-        show_progress=True,
-    ):
-        if not isinstance(train_df, pd.DataFrame):
-            if isinstance(train_df, (sparse.csr_array, sparse.csr_matrix)):
-                train_df = train_df.toarray()
-            train_df = (
-                pd.DataFrame(train_df)
-                .melt(var_name="i_id", value_name="rating", ignore_index=False)
-                .reset_index(names="u_id")
-            )
-        else:
-            fsvd_cols = ["u_id", "i_id", "rating"]
-            assert (
-                train_df.columns == fsvd_cols
-            ).all(), f"funk_svd.SVD requires a long dataframe with columns {fsvd_cols}"
-        self.fit(train_df, show_progress=show_progress)
-        self.set_preferences()
-
-    # TODO distribute into user_factors and item_factors
-    # call .train method, not .fit directly
-    def fit(self, train_df):
-        self._model.fit(train_df)
-        self.preferences = (
-            (self.model.pu_ @ self.model.qi_.T)
-            + self.model.bu_[:, None]
-            + self.model.bi_[None, :]
-        )
-        self.user_factors = ...
-        self.item_factors = ...
-
-    # def save(self, savepath: Path):
-    #     savepath = check_extension(savepath)
-    #     # basically copy how implicit saves its models
-    #     args = {k: v for k, v in self.model.__dict__.items() if v is not None}
-    #     np.savez(savepath, **args)
-    #     self.logger.info("Saved best model to %s", savepath)
-
-    # @classmethod
-    # def load(cls, filename: Path) -> "FSVD":
-    #     filename = check_extension(filename)
-    #     ret = cls(32)
-    #     with np.load(filename, allow_pickle=True) as data:
-    #         for k, v in data.items():
-    #             setattr(ret.model, k, v)
-    #     ret.factors = int(ret.model.factors)
-    #     ret.set_preferences()
-    #     return ret
-
-
-MODEL_NAMES = ["SVDS", "FSVD", "ALS", "LMF"]
-MODELS_MAP = dict(zip(MODEL_NAMES, [SVDS, FSVD, ALS, LMF]))
+MODEL_NAMES = ["SVDS", "ALS", "LMF"]
+MODELS_MAP = dict(zip(MODEL_NAMES, [SVDS, ALS, LMF]))
+MODELS_MAP_REVERSE = {v: k for k, v in MODELS_MAP.items()}

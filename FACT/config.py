@@ -20,6 +20,7 @@ DATA_DIRS = {
     "movielens25m": MOVIELENS_25M_DATA_DIR,
 }
 OCEF_DIR = ROOT_DIR / "results_ocef"
+ENVY_DIR = ROOT_DIR / "results_envy"
 
 LASTFM_URL = "https://files.grouplens.org/datasets/hetrec2011/hetrec2011-lastfm-2k.zip"
 MOVIELENS_1M_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
@@ -34,7 +35,6 @@ GROUND_TRUTH_NAME = "ground_truth"
 class Configuration:
     datasets: List[str] = field(default_factory=lambda: ["movielens", "lastfm"])
     experiment: str = None
-    # model_base_name: str = "model"
     seed: int = constants.SEED
     random_state: utils.SeedSequence = field(init=False)
     parallel: bool = False
@@ -54,6 +54,8 @@ class Configuration:
     movielens_topk_movies: int = 2500
     recommender_evaluation_metric: str = "ndcg"
     evaluation_k: int = 40
+    envy_experiment_name: str = None
+    movielens_do_log: bool = False
 
     ocef_dir: Path = OCEF_DIR
     lastfm_recommender_dir: Path = None
@@ -81,6 +83,8 @@ class Configuration:
         self.random_state = utils.SeedSequence(start=self.seed)
         if not isinstance(self.ocef_dir, Path):
             self.ocef_dir = Path(self.ocef_dir)
+        if self.envy_experiment_name is None:
+            self.envy_experiment_name = generate_slug()
 
         for dataset in self.datasets:
             # filenames and folders

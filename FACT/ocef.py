@@ -7,9 +7,9 @@ from tqdm import tqdm
 import config
 import constants
 
-
 sigma = 0.4
 omega = 0.01
+
 
 def update_bounds(delta, N, rewards):
 
@@ -141,7 +141,6 @@ def ocef(delta, alpha, epsilon, S, means):
 
 def plot(alphas, results_dir: Path = config.OCEF_DIR):
 
-
     all_durations = []
     all_costs = []
 
@@ -207,7 +206,7 @@ def plot(alphas, results_dir: Path = config.OCEF_DIR):
 
     ax1.grid()
     ax2.grid()
-   
+
     plt.savefig(results_dir / "ocef.png")
 
 
@@ -264,7 +263,7 @@ def main(conf: config.Configuration = None):
         print("Running OCEF...")
         run_experiment(S, alphas, problems, num_runs=100, results_dir=results_dir)
     else:
-        print(f"Plot using existing files from {results_dir}...")
+        print(f"Plot using existing files from {results_dir}")
     plot(alphas, results_dir=results_dir)
 
 

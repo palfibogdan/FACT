@@ -85,12 +85,6 @@ def read_movielens_25m() -> pd.DataFrame:
     )
 
 
-# TODO try:
-# - ml-25m log with SVDS + ALS + LMF
-# - ml-1m log all ALS
-# - ml-1m log with SVDS + ALS + LMF
-# - FSVD at all?
-# - ndcg@10 with best of above
 def get_movielens(conf: config.Configuration) -> pd.DataFrame:
     user_item_df = {"1m": read_movielens_1m, "25m": read_movielens_25m}[
         conf.movielens_version
@@ -114,7 +108,10 @@ def get_movielens(conf: config.Configuration) -> pd.DataFrame:
         index="user", columns="item", values="score"
     ).fillna(0.0)
     user_item_df[user_item_df < 3.0] = 0.0
-    user_item_df = np.log(user_item_df, where=user_item_df > 0.0)  # log-transform
+    if conf.movielens_do_log:
+        # log-transform
+        user_item_df = np.log(user_item_df, where=user_item_df > 0.0)
+        logger.info("Applied log-transform on MovieLens-%s", conf.movielens_version)
     return user_item_df
 
 
@@ -123,25 +120,3 @@ DATASETS_RETRIEVE_MAP = {"lastfm": get_lastfm, "movielens": get_movielens}
 
 def get_dataset(dataset_name: str, conf: config.Configuration) -> pd.DataFrame:
     return DATASETS_RETRIEVE_MAP[dataset_name](conf)
-
-
-# import utils
-
-# utils.setup_root_logging()
-# conf = config.Configuration(
-#     # datasets=["lastfm", "movielens"],
-#     datasets=["movielens"],
-#     # assets_root_dir="./",
-#     movielens_version="25m",
-#     # movielens_version="1m",
-#     # lastfm_ground_truth_file=config.LASTFM_RECOMMENDER_DIR / "model_ground_truth.npz",
-#     # lastfm_recommender_dir=config.LASTFM_RECOMMENDER_DIR,
-#     movielens_ground_truth_file=config.MOVIELENS_RECOMMENDER_DIR
-#     / "model_ground_truth.npz",
-#     # movielens_recommender_dir=config.MOVIELENS_RECOMMENDER_DIR,
-#     lastfm_ground_truth_model="ALS",
-#     movielens_ground_truth_model="ALS",
-#     lastfm_recommender_model="ALS",
-#     movielens_recommender_model="ALS",
-# )
-# # df = get_movielens(conf)

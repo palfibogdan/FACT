@@ -1,4 +1,4 @@
-from recommender_models import ALS, FSVD, LMF, SVDS
+from recommender_models import ALS, LMF, SVDS
 
 SEED = 42
 
@@ -26,7 +26,6 @@ ground_truth_hparams = {
     ALS: als_gt_hparams,
     LMF: lmf_gt_hparams,
     SVDS: {"factors": als_gt_hparams["factors"]},
-    FSVD: {},
 }
 recommender_hparams = {
     ALS: {
@@ -39,7 +38,6 @@ recommender_hparams = {
         "regularization": [10 ** (i - 3) for i in range(4)],
     },
     SVDS: recommender_hparams_og,
-    FSVD: {},
 }
 
 
@@ -48,7 +46,6 @@ recommender_hparams = {
 #     ALS: {"factors": [2, 4]},
 #     # LMF: lmf_gt_hparams,
 #     # SVDS: {"factors": als_gt_hparams["factors"]},
-#     # FSVD: {},
 # }
 # recommender_hparams = {
 #     ALS: {
@@ -61,5 +58,4 @@ recommender_hparams = {
 #         "regularization": [10 ** (i - 3) for i in range(4)],
 #     },
 #     SVDS: recommender_hparams_og,
-#     FSVD: {},
 # }

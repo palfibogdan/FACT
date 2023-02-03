@@ -12,11 +12,10 @@ import utils
 
 EXPERIMENT_NAMES = ["envy-misspecification", "bandit-synthetic"]
 EXPERIMENT_FNS = dict(
-    zip(EXPERIMENT_NAMES, [sources_of_envy.envy_from_misspecification, ocef.main])
+    zip(EXPERIMENT_NAMES, [sources_of_envy.do_envy_from_misspecification, ocef.main])
 )
 
 
-# TODO various epsilon, temperature etc
 parsers_config = {
     "log_level": {
         "type": int,
@@ -77,7 +76,7 @@ parsers_config = {
     },
     "parallel": {
         "action": "store_true",
-        "help": "Whether to run grid searches in parallel (useful with FSVD).",
+        "help": "Whether to run grid searches in parallel.",
     },
     "datasets": {
         "default": ["movielens", "lastfm"],
@@ -102,6 +101,14 @@ parsers_config = {
         "choices": EXPERIMENT_NAMES,
         "help": "Name of the experiment to reproduce from the original paper.",
     },
+    "envy_experiment_name": {
+        "type": str,
+        "help": f"Base filename for envy-misspecification plot and pickled metrics. Defaults to {config.ENVY_DIR}/unique slug{{.png|.pkl}}.",
+    },
+    "movielens_do_log": {
+        "action": "store_true",
+        "help": "Whether to apply log-transform to MovieLens datasets.",
+    },
 }
 
 
@@ -119,10 +126,8 @@ def parse_option() -> config.Configuration:
 
 def main(conf: config.Configuration):
     pprint(dataclasses.asdict(conf))
-    res = EXPERIMENT_FNS[conf.experiment](conf)
-    if res is not None:
-        pprint(res)
-    return res
+    exit(0)
+    return EXPERIMENT_FNS[conf.experiment](conf)
 
 
 if __name__ == "__main__":
