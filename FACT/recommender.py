@@ -3,7 +3,7 @@ import logging
 import multiprocessing as mp
 import pprint
 from pathlib import Path
-from typing import Dict, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 from scipy import sparse
 
@@ -28,14 +28,16 @@ def save_hyperparams_and_metrics(filename: Path, hparams: dict, info: dict):
 
 def train_eval_one_configuration(
     hp: dict, rest
-) -> Tuple[Dict[str, float], Dict[str, float], recsys.RecommenderType]:
+) -> Tuple[Dict[str, float], Dict[str, float], recsys.RecommenderType, int]:
     model_class, hparams_names, train, valid, k, seedgen = rest
     hp = dict(zip(hparams_names, hp))
     model = model_class(**hp, random_state=next(seedgen))
     logger_ = getattr(model, "logger", logger)
-    logger_.info("Grid search hparams: %s", hp)
     model.train(train)
-    return model.validate(train, valid, k=k), hp, model
+    valid_metrics = model.validate(train, valid, k=k)
+    logger_.info("Hparams: %s", hp)
+    logger_.info("Validation metrics @%d: %s", k, valid_metrics)
+    return valid_metrics, hp, model, seedgen.val
 
 
 def search_best_model(
@@ -67,7 +69,7 @@ def search_best_model(
     else:
         res = [train_eval_one_configuration(*arg) for arg in args]
 
-    best_metrics, best_hparams, best_model = max(
+    best_metrics, best_hparams, best_model, seed_val = max(
         res, key=lambda el: el[0][conf.recommender_evaluation_metric]
     )
     return {
@@ -77,7 +79,9 @@ def search_best_model(
             **best_metrics,
             "model": best_model.__class__,
             "used": conf.recommender_evaluation_metric,
-            "seed_start": seedgen.start,
+            "ranking_k": conf.evaluation_k,
+            # "seed_start": seedgen.start,
+            "seed": seed_val,
         },
     }
 
@@ -110,7 +114,7 @@ def search_ground_truth(
     best_dict["model"].save(model_save_path)
     logger.debug("Saved best model to %s", model_save_path)
 
-    hparams_save_path = f"{model_save_path.parent / model_save_path.stem}_hparams.txt"
+    hparams_save_path = f"{utils.filename_no_extension(model_save_path)}_hparams.txt"
     save_hyperparams_and_metrics(
         hparams_save_path, best_dict["hparams"], best_dict["info"]
     )
@@ -150,11 +154,11 @@ def search_recommender(
             conf,
         )
 
-        model_base_save_path = conf.recommender_dirs[dataset] / conf.model_base_name
-        best_dict["model"].save(f"{model_base_save_path}_factors_{factor}.npz")
-        logger.debug("Saved best model to %s.npz", model_base_save_path)
+        model_save_path = conf.recommender_dirs[dataset] / config.RECOMMENDER_NAME
+        best_dict["model"].save(f"{model_save_path}_factors_{factor}.npz")
+        logger.debug("Saved best model to %s.npz", model_save_path)
 
-        hparams_save_path = f"{model_base_save_path}_factors_{factor}_hparams.txt"
+        hparams_save_path = f"{model_save_path}_factors_{factor}_hparams.txt"
         save_hyperparams_and_metrics(
             hparams_save_path, best_dict["hparams"], best_dict["info"]
         )
@@ -180,7 +184,7 @@ def generate_recommenders(
     seedgen: utils.SeedSequence,
     conf: config.Configuration,
 ):
-    if ground_truth_model_path.exists():
+    if ground_truth_model_path.is_file():
         logger.info("Loading ground truth preferences from %s", ground_truth_model_path)
         ground_truth_model = conf.ground_truth_models[dataset].load(
             ground_truth_model_path
@@ -191,10 +195,10 @@ def generate_recommenders(
     else:
         logger.error("No recommender system implemented for dataset %s", dataset)
         raise NotImplementedError
-    # greater than 2 -> not just ground truth and ground truth hparams
-    if len(list(conf.recommender_dirs[dataset].iterdir())) > 2:
+    recommender_files = list_default_recommender_files(conf.recommender_dirs[dataset])
+    if recommender_files:
         logger.info(
-            "%s already contains some files, will not grid search recommender %s",
+            "Load pretrained recommenders from %s (no grid search for %s)",
             conf.recommender_dirs[dataset],
             conf.recommender_models[dataset],
         )
@@ -206,3 +210,11 @@ def generate_recommenders(
         )
         logger.info("Start fitting the recommender models.")
         search_recommender(dataset, train, valid, seedgen, conf)
+
+
+def list_default_recommender_files(folder: Path) -> List[Path]:
+    return [
+        f
+        for f in folder.iterdir()
+        if f.suffix == ".npz" and config.GROUND_TRUTH_NAME not in f.name
+    ]

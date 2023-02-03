@@ -187,7 +187,7 @@ class SVDS(Recommender, MatrixFactorizationBase):
         self.logger.info("Saved best model to %s", savepath)
 
     @classmethod
-    def load(cls, filename: Path, random_state=None) -> "SVDS":
+    def load(cls, filename: Path) -> "SVDS":
         filename = check_extension(filename)
         ret = cls(32)
         with np.load(filename, allow_pickle=True) as data:
@@ -201,47 +201,78 @@ class SVDS(Recommender, MatrixFactorizationBase):
         return ret
 
 
-# NOTE not working right now! would need to make the data into pandas long format
-class FSVD(Recommender):
+class FSVD(Recommender, MatrixFactorizationBase):
     _model_class = SVD
+    _model = None
+    num_threads: int = 0  # used by implicit.evaluation
 
-    def __init__(self, factors: int, lr: float = None, regularization: float = None):
+    # random_state unused here
+    def __init__(
+        self, factors: int, lr: float = None, regularization: float = None, **_
+    ):
         super().__init__(factors)
         args = {"n_factors": factors, "n_epochs": 30}
         for k, v in zip(["lr", "reg"], [lr, regularization]):
             if v is not None:
                 args[k] = v
-        self.model = SVD(**args)
+        self._model = SVD(**args)
 
-    def set_preferences(self):
+    @property
+    def model(self) -> "FSVD":
+        return self
+
+    # if train_df is not a pd.DataFrame, it assumes it is a structure in wide
+    # format (user X items)
+    def train(
+        self,
+        train_df: Union[pd.DataFrame, np.ndarray, sparse.csr_array],
+        show_progress=True,
+    ):
+        if not isinstance(train_df, pd.DataFrame):
+            if isinstance(train_df, (sparse.csr_array, sparse.csr_matrix)):
+                train_df = train_df.toarray()
+            train_df = (
+                pd.DataFrame(train_df)
+                .melt(var_name="i_id", value_name="rating", ignore_index=False)
+                .reset_index(names="u_id")
+            )
+        else:
+            fsvd_cols = ["u_id", "i_id", "rating"]
+            assert (
+                train_df.columns == fsvd_cols
+            ).all(), f"funk_svd.SVD requires a long dataframe with columns {fsvd_cols}"
+        self.fit(train_df, show_progress=show_progress)
+        self.set_preferences()
+
+    # TODO distribute into user_factors and item_factors
+    # call .train method, not .fit directly
+    def fit(self, train_df):
+        self._model.fit(train_df)
         self.preferences = (
             (self.model.pu_ @ self.model.qi_.T)
             + self.model.bu_[:, None]
             + self.model.bi_[None, :]
         )
+        self.user_factors = ...
+        self.item_factors = ...
 
-    def train(self, train_df: pd.DataFrame):
-        # NOTE assumes train_df is in long format and contains columns u_id,
-        # i_id and rating
-        self.model.fit(train_df)
-        self.set_preferences()
+    # def save(self, savepath: Path):
+    #     savepath = check_extension(savepath)
+    #     # basically copy how implicit saves its models
+    #     args = {k: v for k, v in self.model.__dict__.items() if v is not None}
+    #     np.savez(savepath, **args)
+    #     self.logger.info("Saved best model to %s", savepath)
 
-    def save(self, savepath: Path):
-        savepath = check_extension(savepath)
-        # basically copy how implicit saves its models
-        args = {k: v for k, v in self.model.__dict__.items() if v is not None}
-        np.savez(savepath, **args)
-        self.logger.info("Saved best model to %s", savepath)
-
-    @classmethod
-    def load(cls, filename: Path) -> "FSVD":
-        filename = check_extension(filename)
-        ret = cls(32)
-        with np.load(filename, allow_pickle=True) as data:
-            for k, v in data.items():
-                setattr(ret.model, k, v)
-        ret.set_preferences()
-        return ret
+    # @classmethod
+    # def load(cls, filename: Path) -> "FSVD":
+    #     filename = check_extension(filename)
+    #     ret = cls(32)
+    #     with np.load(filename, allow_pickle=True) as data:
+    #         for k, v in data.items():
+    #             setattr(ret.model, k, v)
+    #     ret.factors = int(ret.model.factors)
+    #     ret.set_preferences()
+    #     return ret
 
 
 MODEL_NAMES = ["SVDS", "FSVD", "ALS", "LMF"]

@@ -92,9 +92,8 @@ def envy_from_misspecification(
             conf.ground_truth_files[dataset], dataset, conf.random_state, conf
         )
         models_dir = conf.recommender_dirs[dataset]
-        recommenders_by_factors = models_dir.glob(
-            f"{conf.model_base_name}_factors*.npz"
-        )
+        # recommenders_by_factors = models_dir.glob("model_factors*.npz")
+        recommenders_by_factors = recommender.list_default_recommender_files(models_dir)
         ground_truth_class = conf.ground_truth_models[dataset]
         ground_truth_model = ground_truth_class.load(conf.ground_truth_files[dataset])
         metrics[dataset] = experiment_5_1_1(
