@@ -10,9 +10,9 @@ initial_all_als_conf = config.Configuration(
     envy_experiment_name="envy_all_als_initial",
     lastfm_ground_truth_file=config.ROOT_DIR
     / "lastfm"
-    / "all_als_initial_models"
+    / "all_als_models"
     / "model_ground_truth.npz",
-    lastfm_recommender_dir=config.ROOT_DIR / "lastfm" / "all_als_initial_models",
+    lastfm_recommender_dir=config.ROOT_DIR / "lastfm" / "all_als_models",
     movielens_ground_truth_file=config.ROOT_DIR
     / "movielens-1m"
     / "all_als_initial_models"

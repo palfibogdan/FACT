@@ -165,7 +165,7 @@ def persist_results(df: pd.DataFrame, conf: config.Configuration):
         config.ENVY_DIR / conf.envy_experiment_name,
     )
 
-    plt.show()
+    plt.show(block=False)
 
 
 def do_envy_from_misspecification(conf: config.Configuration):
