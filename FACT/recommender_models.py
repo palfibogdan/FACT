@@ -52,12 +52,18 @@ class Recommender:
         item_factors = getattr(self.model, "item_factors", None)
         if user_factors is None or item_factors is None:
             return
-        if isinstance(user_factors, implicit.gpu._cuda.Matrix):
-            # model was trained on the GPU
-            user_factors, item_factors = (
-                user_factors.to_numpy(),
-                item_factors.to_numpy(),
-            )
+        try:
+            if isinstance(user_factors, implicit.gpu._cuda.Matrix):
+                # model was trained on the GPU
+                user_factors, item_factors = (
+                    user_factors.to_numpy(),
+                    item_factors.to_numpy(),
+                )
+        # NOTE it is required to build implicit from source with proper CUDA
+        # support to use GPU on Windows
+        # Issue: https://github.com/benfred/implicit/issues/584
+        except AttributeError:
+            pass
         self.preferences = user_factors @ item_factors.T
 
     def validate(

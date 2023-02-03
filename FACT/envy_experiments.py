@@ -11,15 +11,13 @@ initial_all_als_conf = config.Configuration(
     lastfm_ground_truth_file=config.ROOT_DIR
     / "lastfm"
     / "all_als_models"
-    / "model_ground_truth.npz",
+    / "ground_truth.npz",
     lastfm_recommender_dir=config.ROOT_DIR / "lastfm" / "all_als_models",
     movielens_ground_truth_file=config.ROOT_DIR
     / "movielens-1m"
-    / "all_als_initial_models"
-    / "model_ground_truth.npz",
-    movielens_recommender_dir=config.ROOT_DIR
-    / "movielens-1m"
-    / "all_als_initial_models",
+    / "all_als_models"
+    / "ground_truth.npz",
+    movielens_recommender_dir=config.ROOT_DIR / "movielens-1m" / "all_als_models",
     lastfm_ground_truth_model="ALS",
     movielens_ground_truth_model="ALS",
     lastfm_recommender_model="ALS",
@@ -104,16 +102,39 @@ best_conf_paper_models_1m = config.Configuration(
     movielens_do_log=True,
 )
 
+# movielens-1m, apply log on movielens too, ndcg@40, all ALS models
+best_conf_1m_all_als = config.Configuration(
+    envy_experiment_name="ml1m_log_all_als",
+    # don't regenerate for lastfm by giving same path
+    lastfm_ground_truth_file=config.ROOT_DIR
+    / "lastfm"
+    / "all_als_models"
+    / "ground_truth.npz",
+    lastfm_recommender_dir=config.ROOT_DIR / "lastfm" / "all_als_models",
+    movielens_ground_truth_file=config.ROOT_DIR
+    / "movielens-1m"
+    / "all_als_log_models"
+    / "ground_truth.npz",
+    movielens_recommender_dir=config.ROOT_DIR / "movielens-1m" / "all_als_log_models",
+    movielens_do_log=True,
+    lastfm_ground_truth_model="ALS",
+    movielens_ground_truth_model="ALS",
+    lastfm_recommender_model="ALS",
+    movielens_recommender_model="ALS",
+)
+
+
+all_confs = [
+    paper_conf,
+    initial_all_als_conf,
+    best_conf_all_als,
+    best_conf_paper_models,
+    best_conf_1m_all_als,
+]
 
 if __name__ == "__main__":
     utils.setup_root_logging()
 
-    for conf in [
-        paper_conf,
-        initial_all_als_conf,
-        best_conf_all_als,
-        best_conf_paper_models,
-        best_conf_paper_models_1m,
-    ]:
+    for conf in all_confs:
         pprint(dataclasses.asdict(conf))
         do_envy_from_misspecification(conf)
