@@ -7,24 +7,11 @@ from tqdm import tqdm
 import config
 import constants
 
-# TODO:
-# Implement conservative constraint Xi
-# Implement observe, action and reward part
-# Verify indices for Beta (Lemma 4 returns Beta_t but OCEF uses Beta_(t-1) )
-# Implement get_phi from Lemma 5 and 6
 
 sigma = 0.4
+omega = 0.01
 
-
-# check out robin initialization
-# problem probably lies in the values of the bounds of the arms not pulled
 def update_bounds(delta, N, rewards):
-
-    omega = 0.01
-
-    # original
-    # sigma = 0.5 (deduced from paper)
-    # omega = 0.99 (confirmed by authors)
 
     theta = np.log(1 + omega) * ((omega * delta) / (2 * (2 + omega))) ** (
         1 / (1 + omega)
@@ -118,8 +105,6 @@ def ocef(delta, alpha, epsilon, S, means):
 
         Phi = get_phi(N, delta, betas)
 
-        # history of rewards???
-        # not sure if t here is t-1 or the actual t in their formulas
         xi = get_conservarive_constraint(
             t, A, reward_history, Phi, low_bounds[l], high_bounds[0], N[0], alpha
         )
@@ -138,13 +123,9 @@ def ocef(delta, alpha, epsilon, S, means):
 
         # Store all rewards
         rewards[k_t] += r
-
-        # optimization problem
         reward_history.append(r)
 
         S = remove_non_envy_elements(S, low_bounds, high_bounds, epsilon)
-
-        # prints(betas, low_bounds, high_bounds, N, xi, S, rewards, t)
 
         t += 1
 
@@ -158,30 +139,8 @@ def ocef(delta, alpha, epsilon, S, means):
             return False, t, reward_history
 
 
-def prints(betas, low_bounds, high_bounds, N, xi, S, rewards, t):
-
-    # clear screen
-    # os.system('cls' if os.name == 'nt' else 'clear')
-
-    # betas = [round(beta, 2) for beta in betas]
-    # print("betas: ", betas)
-    # lows = [round(low, 2) for low in low_bounds]
-    # highs = [round(high, 2) for high in high_bounds]
-    # print("low_bounds: ", lows)
-    # print("high_bounds: ", highs)
-    # print("\n")
-    # print("N: ", N)
-    # print("xi: ", xi)
-    # print(S)
-    # print("\n")
-    # print(rewards)
-    if t % 1000 == 0:
-        print(t)
-
-
 def plot(alphas, results_dir: Path = config.OCEF_DIR):
 
-    # save as npy next time...
 
     all_durations = []
     all_costs = []
@@ -248,11 +207,8 @@ def plot(alphas, results_dir: Path = config.OCEF_DIR):
 
     ax1.grid()
     ax2.grid()
-    # ax1.set_yticks([0.1, 0.5, 1.0, 5.0])
-    # ax1.set_yticklabels([0.1, 0.5, 1.0, 5.0])
-
-    fig.savefig(results_dir / "ocef.png")
-    plt.show()
+   
+    plt.savefig(results_dir / "ocef.png")
 
 
 def run_experiment(
@@ -274,7 +230,7 @@ def run_experiment(
             mean_cost = sum(temp_cost) / len(temp_cost)
             tp = (mean_t, mean_cost)
             # save to file
-            with open(results_dir / f"problem{problem}.txt", "a") as f:
+            with open(results_dir / f"problem{problem+1}.txt", "a") as f:
                 f.write(str(tp) + "\n")
 
 
@@ -301,20 +257,6 @@ def main(conf: config.Configuration = None):
     means = [0.7 - 0.7 * (k / 10) ** 0.6 for k in range(10)]
     means[0], means[1] = means[1], means[0]
     problems.append(means)
-
-    # prob = 3
-    # temp_t = []
-    # temp_cost = []
-    # for _ in tqdm(range(100)):
-    #     _, t, rewards, = ocef(delta=0.05, alpha=0.4, epsilon=0.05, S=S, means=problems[prob])
-    #     temp_t.append(t)
-    #     temp_cost.append(t * problems[prob][0] - sum(rewards))
-
-    # print("Avg duration:", sum(temp_t) / len(temp_t))
-    # print("Avg cost:", sum(temp_cost) / len(temp_cost))
-    # print("Timed out:", len([t for t in temp_t if t >= 70000]))
-    # print("Problem ", prob+1)
-    # print(problems[prob])
 
     results_dir = config.OCEF_DIR if conf is None else conf.ocef_dir
     if not results_dir.is_dir() or not any(results_dir.iterdir()):
