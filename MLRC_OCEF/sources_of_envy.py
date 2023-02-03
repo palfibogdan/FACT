@@ -118,8 +118,7 @@ def envy_from_misspecification(
 
 
 def persist_results(df: pd.DataFrame, conf: config.Configuration):
-    plt.rcParams["text.usetex"] = True
-    font = {"weight": "bold", "size": 12}
+    font = {"size": 10}
     plt.rc("font", **font)
 
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 5))
@@ -133,9 +132,7 @@ def persist_results(df: pd.DataFrame, conf: config.Configuration):
     sns.lineplot(data=df, x=df.index, y="prop_eps_envy", hue="dataset", ax=ax1)
     ax1.set_xlim(-5, 120)
     ax1.set_xlabel("Factors")
-    ax1.set_ylabel(
-        r"Prop. of $\epsilon$-envy users ($\epsilon=" + str(conf.epsilon) + r"$)"
-    )
+    ax1.set_ylabel("Prop. of \u03B5-envy users")
     ax1.grid()
 
     lastfm_gt = recsys.MODELS_MAP_REVERSE[conf.lastfm_ground_truth_model]
