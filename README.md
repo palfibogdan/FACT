@@ -63,7 +63,15 @@ scratch, rename or delete the `results_ocef` folder and run the above
 command.
 
 ### Envy from model misspecification
+To fully reproduce the experiments concerning envy from model misspecification, make sure there are no folders `movielens-1m` and 
+`lastfm` at the root of the git project. Then, run:
+```
+python MLRC_OCEF/main.py --experiment envy-misspecification
+```
 
+To reproduce all the additional plots in `results_envy`, run the `MLRC_OCEF/envy_experiments.py` script; new plots will be saved to `results_envy`. Then, you can use the configurations described in that script from inside `MLRC_OCEF/results_notebook.ipynb` to visualize the plots interactively. 
+
+Alternatively, you can copy any of those configurations in `MLRC_OCEF/results_notebook.ipynb` and evaluate the notebook to produce the corresponding plot.
 
 ---
 ## References
